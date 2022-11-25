@@ -1,6 +1,4 @@
-import re
 import pandas as pd
-from datetime import datetime
 
 class SrcRec():
     def __init__(self, fname:str, src_only=False) -> None:
@@ -30,33 +28,44 @@ class SrcRec():
         :rtype: SrcRec
         """
         sr = cls(fname, **kwargs)
-        with open(fname) as f:
-            lines = f.readlines()
-        for line in lines:
-            line_sp = line.split()
-            if len(line_sp) >= 13:
-                ot = datetime.strptime(
-                    '.'.join(line_sp[1:7]),
-                    '%Y.%m.%d.%H.%M.%S.%f')
-                evinfo = [float(ss) for ss in line_sp[7:11]]
-                num_rec = int(line_sp[11])
-                src_info = [
-                    ot, *evinfo, num_rec, line_sp[12]
-                ]
-                rec_data = pd.DataFrame(
-                    columns=['staname', 'stla', 'stlo', 'stel', 'phase', 'tt']
-                )
-                if len(line_sp) == 13:
-                    src_info += [1.0, rec_data]
-                else:
-                    src_info += [float(line_sp[13]), rec_data]
-                sr.data.loc[int(line_sp[0])] = src_info
-            else:
-                if sr.src_only:
-                    continue
-                stinfo = [float(v) for v in line_sp[3:6]]
-                sr.data.loc[int(line_sp[0])]['rec_data'].loc[int(line_sp[1])] = \
-                    [line_sp[2], *stinfo, line_sp[6], float(line_sp[7])]
+        alldf = pd.read_table(fname, sep='\s+|\t', engine='python', header=None)
+        cls.src_points = alldf[pd.notna(alldf[13])]
+        cls.src_points.index = cls.src_points[0]
+        if cls.src_points.shape[1] == 13:
+            cls.src_points = pd.concat([cls.src_points, pd.Series([1.0]*cls.src_points.shape[0])])
+        datedf = cls.src_points[cls.src_points.columns[1:7]]
+        type_dict = {
+            1: int,
+            2: int,
+            3: int,
+            4: int,
+            5: int,
+            6: float,
+        }
+        datedf = datedf.astype(type_dict)
+        dateseris = datedf.astype(str).apply(lambda x: '.'.join(x), axis=1).apply(
+            pd.to_datetime, format='%Y.%m.%d.%H.%M.%S.%f')
+        dateseris.name = 'origin_time'
+        src_data = cls.src_points[cls.src_points.columns[7:]]
+        src_data.columns = ['evla', 'evlo',
+                            'evdp', 'mag', 'num_rec', 
+                            'event_id', 'weight',]
+        type_dict = {
+            'evla': float,
+            'evlo': float,
+            'evdp': float,
+            'mag': float,
+            'num_rec': int,
+            'event_id': str,
+            'weight': float
+        }
+        src_data = src_data.astype(type_dict)
+        cls.src_points = pd.concat([dateseris, src_data], axis=1)
+        cls.rec_points = alldf[pd.isna(alldf[8])].reset_index(drop=True)
+        cls.rec_points = cls.rec_points[cls.rec_points.columns[0:8]]
+        cls.rec_points.columns = [
+            'src_index', 'rec_index', 'staname', 'stla', 'stlo', 'stel', 'phase', 'tt'
+        ]
         return sr
     
     def write(self, fname='src_rec_file'):
@@ -66,7 +75,7 @@ class SrcRec():
         :type fname: str, optional
         """
         with open(fname, 'w') as f:
-            for idx, src in self.data.iterrows():
+            for idx, src in self.src_points.iterrows():
                 time_lst = src['origin_time'].strftime('%Y_%m_%d_%H_%M_%S.%f').split('_')
                 f.write('{:d} {} {} {} {} {} {} {:.4f} {:.4f} {:.4f} {:.4f} {} {} {:.4f}\n'.format(
                     idx, *time_lst, src['evla'], src['evlo'], src['evdp'],
@@ -74,12 +83,14 @@ class SrcRec():
                 ))
                 if self.src_only:
                     continue
-                for ridx, rec in src['rec_data'].iterrows():
-                    f.write('{:d} {:d} {:6.4f} {:6.4f} {:6.4f} {} {:6.4f}\n'.format(
-                        idx, ridx, rec['stla'], rec['stlo'], rec['stel'], rec['phase'], rec['tt']
+                rec_data = self.rec_points[self.rec_points['src_index']==idx]
+                for _, rec in rec_data.iterrows():
+                    f.write('{:d} {:d} {} {:6.4f} {:6.4f} {:6.4f} {} {:6.4f}\n'.format(
+                        idx, rec['rec_index'], rec['staname'], rec['stla'],
+                        rec['stlo'], rec['stel'], rec['phase'], rec['tt']
                     ))
 
 if __name__ == '__main__':
-    sr = SrcRec.read('src_rec_file_eg')
+    sr = SrcRec.read('src_rec_file_checker_data_test1.dat_noised_evweighted')
     sr.write()
-    print(sr.data.loc[0]['rec_data'])
+    print(sr.rec_points)
