@@ -16,6 +16,8 @@ def init_project(path):
             makedirs(path)
         else:
             pass
+    else:
+        makedirs(path)
     copy(inpara_path, join(path, 'input_params.yml'))
     copy(src_rec_path, join(path, 'src_rec.dat'))
 
