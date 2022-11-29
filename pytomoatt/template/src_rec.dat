@@ -1,0 +1,4 @@
+## src_index year month day hour min sec lat lon dep_km mag num_recs id_event weight
+# 26 1992  1  1  2 43  56.900    1.8000     98.9000 137.00  2.80    8    305644 1.500
+## src_index rec_index name_rec lat lon elevation_m phase arrival_time_sec
+# 26      1      PCBI       1.8900     98.9253   1000.0000  P    18.000

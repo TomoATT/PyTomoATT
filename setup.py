@@ -6,7 +6,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 setup(name='PyTomoATT',
       version=VERSION,
       author='Mijian Xu, Masaru Nagaso',
@@ -15,6 +15,7 @@ setup(name='PyTomoATT',
       author_email='mijian.xu@ntu.edu.sg',
       license='GPLv3',
       package_dir={'pytomoatt': 'pytomoatt'},
+      package_data={'': ['template/*']},
       packages=find_packages(),
       install_requires=[
                 'numpy>=1.19.0',
@@ -23,6 +24,7 @@ setup(name='PyTomoATT',
                 'h5py',
                 'pyyaml',
                 'xarray'],
+      entry_points={'console_scripts':['pta=pytomoatt.script:main']},
       zip_safe=False,
       classifiers=['Programming Language :: Python',
                    'Programming Language :: Python :: 3.9',
