@@ -1,4 +1,6 @@
 import pandas as pd
+pd.options.mode.chained_assignment = None  # default='warn'
+
 
 class SrcRec():
     def __init__(self, fname:str, src_only=False) -> None:
@@ -23,13 +25,15 @@ class SrcRec():
                 number of receivers={self.rec_points.shape[0]}"
 
     @classmethod
-    def read(cls, fname: str, dist_in_data=False, **kwargs):
+    def read(cls, fname: str, dist_in_data=False, name_net_and_sta=False, **kwargs):
         """Read source <--> receiver file to pandas.DataFrame
 
         :param fname: Path to src_rec file
         :type fname: str
         :param dist_in_data: Whether distance is included in the src_rec file
         :type dist_in_data: bool
+        :param name_net_and_sta: Whether to include network and station name in the src_rec file
+        :type name_net_and_sta: bool
         :return: class of SrcRec
         :rtype: SrcRec
         """
@@ -37,13 +41,13 @@ class SrcRec():
         alldf = pd.read_table(fname, sep='\s+|\t', engine='python',
                               header=None, comment="#")
 
-        last_col = 12
+        last_col_src = 12
         # this is a source line if the last column is not NaN
-        sr.src_points = alldf[pd.notna(alldf[last_col])]
+        sr.src_points = alldf[pd.notna(alldf[last_col_src])]
         # add weight column if not included
-        if sr.src_points.shape[1] == last_col+1:
+        if sr.src_points.shape[1] == last_col_src+1:
             # add another column for weight
-            sr.src_points.loc[:, last_col+1] = 1.0
+            sr.src_points.loc[:, last_col_src+1] = 1.0
 
         # src id dataframe
         sr.src_points.index = sr.src_points.iloc[:, 0]
@@ -98,9 +102,12 @@ class SrcRec():
             else:
                 last_col = 8
 
+            if name_net_and_sta:
+                last_col += 1
+
             # extract the rows if the last_col is not NaN and the 12th column is NaN
             sr.rec_points = alldf[(alldf[last_col].notna())
-                                & (alldf[12].isna())].reset_index(drop=True)
+                                & (alldf[last_col_src].isna())].reset_index(drop=True)
 
             # add weight column if not included
             if sr.rec_points.loc[:, last_col+1].isna().all():
@@ -116,16 +123,33 @@ In this case, please set dist_in_data=True and read again.""")
             # extract only the first part of columns (cut unnecessary columns)
             sr.rec_points = sr.rec_points.loc[:, :last_col+1]
 
-            if not dist_in_data:
-                sr.rec_points.columns = [
-                    'src_index', 'rec_index', 'staname',
-                    'stla', 'stlo', 'stel', 'phase', 'tt', 'weight'
-                ]
+            if name_net_and_sta == False:
+                if not dist_in_data:
+                    sr.rec_points.columns = [
+                        'src_index', 'rec_index', 'staname',
+                        'stla', 'stlo', 'stel', 'phase', 'tt', 'weight'
+                    ]
+                else:
+                    sr.rec_points.columns = [
+                        'src_index', 'rec_index', 'staname',
+                        'stla', 'stlo', 'stel', 'phase', 'dist_deg', 'tt', 'weight'
+                    ]
             else:
-                sr.rec_points.columns = [
-                    'src_index', 'rec_index', 'staname',
-                    'stla', 'stlo', 'stel', 'phase', 'dist_deg', 'tt', 'weight'
-                ]
+                if not dist_in_data:
+                    sr.rec_points.columns = [
+                        'src_index', 'rec_index', 'netname', 'staname',
+                        'stla', 'stlo', 'stel', 'phase', 'tt', 'weight'
+                    ]
+                else:
+                    sr.rec_points.columns = [
+                        'src_index', 'rec_index', 'netname', 'staname',
+                        'stla', 'stlo', 'stel', 'phase', 'dist_deg', 'tt', 'weight'
+                    ]
+
+                # concatenate network and station name with "_"
+                sr.rec_points['staname'] = sr.rec_points['netname'] + '_' + sr.rec_points['staname']
+                # drop network name column
+                sr.rec_points.drop('netname', axis=1, inplace=True)
 
         return sr
 
