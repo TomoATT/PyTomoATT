@@ -1,6 +1,7 @@
+import numpy as np
 import pandas as pd
 pd.options.mode.chained_assignment = None  # default='warn'
-
+import tqdm
 
 class SrcRec():
     def __init__(self, fname:str, src_only=False) -> None:
@@ -12,14 +13,14 @@ class SrcRec():
         :type src_only: bool, optional
         """
 
-        self.fname = fname
         self.src_only = src_only
         self.src_points = None
         self.rec_points = None
+        self.fnames = [fname]
 
     def __repr__(self):
         return f"PyTomoATT SrcRec Object: \n\
-                fname={self.fname}, \n\
+                fnames={self.fnames}, \n\
                 src_only={self.src_only}, \n\
                 number of sources={self.src_points.shape[0]}, \n\
                 number of receivers={self.rec_points.shape[0]}"
@@ -160,7 +161,8 @@ In this case, please set dist_in_data=True and read again.""")
         :type fname: str, optional
         """
         with open(fname, 'w') as f:
-            for idx, src in self.src_points.iterrows():
+            for idx, src in tqdm.tqdm(self.src_points.iterrows(),
+                                      total=len(self.src_points)):
                 time_lst = src['origin_time'].strftime('%Y_%m_%d_%H_%M_%S.%f').split('_')
                 f.write('{:d} {} {} {} {} {} {} {:.4f} {:.4f} {:.4f} {:.4f} {} {} {:.4f}\n'.format(
                     idx, *time_lst, src['evla'], src['evlo'], src['evdp'],
@@ -170,10 +172,50 @@ In this case, please set dist_in_data=True and read again.""")
                     continue
                 rec_data = self.rec_points[self.rec_points['src_index']==idx]
                 for _, rec in rec_data.iterrows():
-                    f.write('{:d} {:d} {} {:6.4f} {:6.4f} {:6.4f} {} {:6.4f}\n'.format(
+                    f.write('   {:d} {:d} {} {:6.4f} {:6.4f} {:6.4f} {} {:6.4f} {:6.4f}\n'.format(
                         idx, rec['rec_index'], rec['staname'], rec['stla'],
-                        rec['stlo'], rec['stel'], rec['phase'], rec['tt']
+                        rec['stlo'], rec['stel'], rec['phase'], rec['tt'], rec['weight']
                     ))
+
+    def reset_index(self):
+        # reset src_index to be 0, 1, 2, ... for both src_points and rec_points
+        self.rec_points['src_index'] = self.rec_points['src_index'].map(
+            dict(zip(self.src_points.index, np.arange(len(self.src_points)))))
+        self.src_points.index = np.arange(len(self.src_points))
+        self.src_points.index.name = 'src_index'
+
+        # reset rec_index to be 0, 1, 2, ... for rec_points
+        self.rec_points['rec_index'] = self.rec_points.groupby('src_index').cumcount()
+        #sr.rec_points['rec_index'] = sr.rec_points['rec_index'].astype(int)
+
+    def append(self, sr):
+        """Append another SrcRec object to the current one
+
+        :param sr: Another SrcRec object
+        :type sr: SrcRec
+        """
+        if not isinstance(sr, SrcRec):
+            raise TypeError('Input must be a SrcRec object')
+
+        if self.src_only != sr.src_only:
+            raise ValueError('Cannot append src_only and non-src_only SrcRec objects')
+
+        # number of sources to be added
+        n_src_offset = self.src_points.shape[0]
+
+        # append src_points
+        self.src_points = pd.concat([self.src_points, sr.src_points], ignore_index=True)
+        self.src_points.index.name = 'src_index'
+        self.src_points.index += 1  # start from 1
+
+        if not self.src_only:
+            # update src_index in rec_points
+            sr.rec_points['src_index'] += n_src_offset
+            # append rec_points
+            self.rec_points = pd.concat([self.rec_points, sr.rec_points], ignore_index=True)
+
+        # store fnames
+        self.fnames.extend(sr.fnames)
 
 if __name__ == '__main__':
     sr = SrcRec.read('src_rec_file_checker_data_test1.dat_noised_evweighted')
