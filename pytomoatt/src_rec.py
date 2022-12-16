@@ -3,7 +3,9 @@ import pandas as pd
 pd.options.mode.chained_assignment = None  # default='warn'
 import tqdm
 
+
 class SrcRec():
+
     def __init__(self, fname:str, src_only=False) -> None:
         """I/O for source <--> receiver file
 
@@ -203,6 +205,14 @@ In this case, please set dist_in_data=True and read again.""")
         # number of sources to be added
         n_src_offset = self.src_points.shape[0]
 
+        # add column for source file tag if not included
+        if 'fname' not in self.src_points.columns:
+            self.src_points['fname'] = self.fnames[0]
+            self.rec_points['fname'] = self.fnames[0]
+        if 'fname' not in sr.src_points.columns:
+            sr.src_points['fname'] = sr.fnames[0]
+            sr.rec_points['fname'] = sr.fnames[0]
+
         # append src_points
         self.src_points = pd.concat([self.src_points, sr.src_points], ignore_index=True)
         self.src_points.index.name = 'src_index'
@@ -216,6 +226,91 @@ In this case, please set dist_in_data=True and read again.""")
 
         # store fnames
         self.fnames.extend(sr.fnames)
+
+    def remove_rec_by_new_src(self):
+        """
+        remove rec_points by new src_points
+        """
+        print('rec_points before removing: ', self.rec_points.shape)
+        self.rec_points = self.rec_points[self.rec_points['src_index'].isin(self.src_points.index)]
+        print('rec_points after removing: ', self.rec_points.shape)
+
+    def erase_duplicate_events(self, thre_deg, thre_dep, thre_time_in_min):
+        """
+        check and count how many events are duplicated,
+        under given threshold of distance, depth, and time.
+        thre_deg : float
+            threshold of distance in degree
+        thre_dep : float
+            threshold of depth in km
+        thre_time_in_min : float
+            threshold of time in minutes
+        """
+
+        # sort event data
+        self.src_points.sort_values(by=["origin_time", "evlo", "evla"], inplace=True)
+
+        num_duplicated = 99999
+        iter_count = 0
+
+        while (num_duplicated > 0):
+
+            # difference with row +1
+            self.src_points['diff_evlo+1'] = self.src_points['evlo'].diff().abs()
+            self.src_points['diff_evla+1'] = self.src_points['evla'].diff().abs()
+            self.src_points['diff_evdp+1'] = self.src_points['evdp'].diff().abs()
+            self.src_points['diff_time+1'] = self.src_points['origin_time'].diff().abs()
+            self.src_points['diff_nrec+1'] = self.src_points['num_rec'].diff()
+            # difference with row -1
+            self.src_points['diff_evlo-1'] = self.src_points['evlo'].diff(periods=-1).abs()
+            self.src_points['diff_evla-1'] = self.src_points['evla'].diff(periods=-1).abs()
+            self.src_points['diff_evdp-1'] = self.src_points['evdp'].diff(periods=-1).abs()
+            self.src_points['diff_time-1'] = self.src_points['origin_time'].diff(periods=-1).abs()
+            self.src_points['diff_nrec-1'] = self.src_points['num_rec'].diff(periods=-1)
+
+            self.src_points["duplicated+1"] = self.src_points.apply(lambda x: 1 if x['diff_evlo+1']<thre_deg and x['diff_evla+1']<thre_deg and x['diff_evdp+1']<thre_dep and x['diff_time+1']<pd.Timedelta(minutes=thre_time_in_min) else 0, axis=1)
+            self.src_points["duplicated-1"] = self.src_points.apply(lambda x: 1 if x['diff_evlo-1']<thre_deg and x['diff_evla-1']<thre_deg and x['diff_evdp-1']<thre_dep and x['diff_time-1']<pd.Timedelta(minutes=thre_time_in_min) else 0, axis=1)
+
+            # drop rows (duplicated == 1 and diff_nrec <= 0)
+            self.src_points = self.src_points[~((self.src_points['duplicated+1']==1) & (self.src_points['diff_nrec+1']<0))]
+            # drow upper row of (duplicated == 1 and diff_nrec > 0)
+            self.src_points = self.src_points[~((self.src_points['duplicated-1']==1) & (self.src_points['diff_nrec-1']<=0))]
+
+            # print iterate count and number of rows, number of duplicated rows
+            num_duplicated = self.src_points[(self.src_points["duplicated+1"]==1) | (self.src_points["duplicated-1"]==1)].shape[0]
+            print("iteration: ", iter_count, "num_duplicated: ", num_duplicated)
+
+            iter_count += 1
+
+        # erase all columns starting with diff_*
+        self.src_points.drop(self.src_points.columns[self.src_points.columns.str.startswith('diff_')], axis=1, inplace=True)
+        # erase all clumuns starting with duplicated
+        self.src_points.drop(self.src_points.columns[self.src_points.columns.str.startswith('duplicated')], axis=1, inplace=True)
+
+        # erase rec_points
+        self.erase_rec_by_new_src()
+
+        # sort by src_index
+        self.src_points.sort_values(by=['src_index'], inplace=True)
+        self.rec_points.sort_values(by=['src_index', 'rec_index'], inplace=True)
+
+    def select_phase(self, phase_list):
+        """
+        select interested phase and remove others
+        phase_list : list of str
+        """
+
+        print('rec_points before selecting: ', self.rec_points.shape)
+        self.rec_points = self.rec_points[self.rec_points['phase'].isin(phase_list)]
+        print('rec_points after selecting: ', self.rec_points.shape)
+
+        # modify num_rec in src_points
+        self.src_points['num_rec'] = self.rec_points.groupby('src_index').size()
+
+        # sort by src_index
+        self.src_points.sort_values(by=['src_index'], inplace=True)
+        self.rec_points.sort_values(by=['src_index', 'rec_index'], inplace=True)
+
 
 if __name__ == '__main__':
     sr = SrcRec.read('src_rec_file_checker_data_test1.dat_noised_evweighted')
