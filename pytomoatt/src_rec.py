@@ -287,8 +287,8 @@ In this case, please set dist_in_data=True and read again.""")
         # erase all clumuns starting with duplicated
         self.src_points.drop(self.src_points.columns[self.src_points.columns.str.startswith('duplicated')], axis=1, inplace=True)
 
-        # erase rec_points
-        self.erase_rec_by_new_src()
+        # remove rec_points by new src_points
+        self.remove_rec_by_new_src()
 
         # sort by src_index
         self.src_points.sort_values(by=['src_index'], inplace=True)
