@@ -235,6 +235,12 @@ In this case, please set dist_in_data=True and read again.""")
         self.rec_points = self.rec_points[self.rec_points['src_index'].isin(self.src_points.index)]
         print('rec_points after removing: ', self.rec_points.shape)
 
+    def update_num_rec(self):
+        """
+        update num_rec in src_points by current rec_points
+        """
+        self.src_points['num_rec'] = self.rec_points.groupby('src_index').size()
+
     def erase_duplicate_events(self, thre_deg, thre_dep, thre_time_in_min):
         """
         check and count how many events are duplicated,
@@ -310,6 +316,48 @@ In this case, please set dist_in_data=True and read again.""")
         # sort by src_index
         self.src_points.sort_values(by=['src_index'], inplace=True)
         self.rec_points.sort_values(by=['src_index', 'rec_index'], inplace=True)
+
+    def select_one_event_in_each_subgrid(self, d_deg, d_km):
+        """
+        select one event in each subgrid
+        d_deg : float
+            grid size in degree
+        d_km : float
+            grid size in km
+        """
+        print('src_points before selecting: ', self.src_points.shape)
+        print('processing... (this may take a few minutes)')
+
+        # store index of src_points as 'src_index'
+        self.src_points['src_index'] = self.src_points.index
+
+        # add 'lat_group' and 'lon_group' to src_points by module d_deg
+        self.src_points['lat_group'] = self.src_points['evla'].apply(lambda x: int(x/d_deg))
+        self.src_points['lon_group'] = self.src_points['evlo'].apply(lambda x: int(x/d_deg))
+
+        # add 'dep_group' to src_points by module d_km
+        self.src_points['dep_group'] = self.src_points['evdp'].apply(lambda x: int(x/d_km))
+
+        # sort src_points by 'lat_group' and 'lon_group' and 'dep_group'
+        self.src_points = self.src_points.sort_values(by=['lat_group', 'lon_group', 'dep_group'])
+
+        # find all events in the same lat_group and lon_group and dep_group
+        # and keep only on with largest nrec
+        self.src_points = self.src_points.groupby(['lat_group', 'lon_group', 'dep_group']).apply(lambda x: x.sort_values(by='num_rec', ascending=False).iloc[0])
+
+        # drop 'lat_group' and 'lon_group' and 'dep_group'
+        self.src_points = self.src_points.drop(columns=['lat_group', 'lon_group', 'dep_group'])
+
+        # restore index from 'src_index'
+        self.src_points = self.src_points.set_index('src_index')
+
+        # sort src_points by index
+        self.src_points = self.src_points.sort_index()
+
+        print('src_points after selecting: ', self.src_points.shape)
+
+        # remove rec_points by new src_points
+        self.remove_rec_by_new_src()
 
 
 if __name__ == '__main__':
