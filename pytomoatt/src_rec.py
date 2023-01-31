@@ -1,8 +1,7 @@
 import numpy as np
+import tqdm
 import pandas as pd
 pd.options.mode.chained_assignment = None  # default='warn'
-import tqdm
-
 
 class SrcRec():
 
@@ -383,12 +382,13 @@ In this case, please set dist_in_data=True and read again.""")
         # number of unique stations before merging
         print('number of unique stations before merging: ', self.rec_points['staname'].nunique())
 
-        # add 'lat_group' and 'lon_group' to src_points by module d_deg
-        self.rec_points['lat_group'] = self.rec_points['stla'].apply(lambda x: int(x/d_deg))
-        self.rec_points['lon_group'] = self.rec_points['stlo'].apply(lambda x: int(x/d_deg))
+        # create 'lat_group', 'lon_group' and 'dep_group' columns from 'stla', 'stlo' and 'stel'
+        def create_groups(row, column, d):
+            return int(row[column]/d)
 
-        # add 'dep_group' to src_points by module d_km
-        self.rec_points['dep_group'] = self.rec_points['stel'].apply(lambda x: int(x/(d_km*1000)))
+        self.rec_points['lat_group'] = self.rec_points.apply(lambda x: create_groups(x, 'stla', d_deg), axis=1)
+        self.rec_points['lon_group'] = self.rec_points.apply(lambda x: create_groups(x, 'stlo', d_deg), axis=1)
+        self.rec_points['dep_group'] = self.rec_points.apply(lambda x: create_groups(x, 'stel', d_km*1000), axis=1)
 
         # sort src_points by 'lat_group' and 'lon_group' and 'dep_group'
         self.rec_points = self.rec_points.sort_values(by=['lat_group', 'lon_group', 'dep_group', 'num_events'], ascending=[True, True, True, False])
