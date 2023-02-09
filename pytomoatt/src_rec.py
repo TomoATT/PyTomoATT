@@ -28,7 +28,7 @@ class SrcRec():
                 number of receivers={self.rec_points.shape[0]}"
 
     @classmethod
-    def read(cls, fname: str, dist_in_data=False, name_net_and_sta=False, **kwargs):
+    def read(cls, fname:str, dist_in_data=False, name_net_and_sta=False, **kwargs):
         """Read source <--> receiver file to pandas.DataFrame
 
         :param fname: Path to src_rec file
@@ -191,7 +191,8 @@ In this case, please set dist_in_data=True and read again.""")
         #sr.rec_points['rec_index'] = sr.rec_points['rec_index'].astype(int)
 
     def append(self, sr):
-        """Append another SrcRec object to the current one
+        """
+        Append another SrcRec object to the current one
 
         :param sr: Another SrcRec object
         :type sr: SrcRec
@@ -241,7 +242,7 @@ In this case, please set dist_in_data=True and read again.""")
         """
         self.src_points['num_rec'] = self.rec_points.groupby('src_index').size()
 
-    def erase_duplicate_events(self, thre_deg, thre_dep, thre_time_in_min):
+    def erase_duplicate_events(self, thre_deg:float, thre_dep:float, thre_time_in_min:float):
         """
         check and count how many events are duplicated,
         under given threshold of distance, depth, and time.
@@ -305,7 +306,8 @@ In this case, please set dist_in_data=True and read again.""")
         select interested phase and remove others
         phase_list : list of str
         """
-
+        if not isinstance(phase_list (list, str)):
+            raise TypeError('phase_list should be in list or str')
         print('rec_points before selecting: ', self.rec_points.shape)
         self.rec_points = self.rec_points[self.rec_points['phase'].isin(phase_list)]
         print('rec_points after selecting: ', self.rec_points.shape)
@@ -317,7 +319,7 @@ In this case, please set dist_in_data=True and read again.""")
         self.src_points.sort_values(by=['src_index'], inplace=True)
         self.rec_points.sort_values(by=['src_index', 'rec_index'], inplace=True)
 
-    def select_one_event_in_each_subgrid(self, d_deg, d_km):
+    def select_one_event_in_each_subgrid(self, d_deg:float, d_km:float):
         """
         select one event in each subgrid
         d_deg : float
@@ -368,7 +370,7 @@ In this case, please set dist_in_data=True and read again.""")
         # reflect the total number of events for each station
         self.rec_points['num_events'] = self.rec_points.groupby('staname')['num_events'].transform('max')
 
-    def merge_adjacent_stations(self, d_deg, d_km):
+    def merge_adjacent_stations(self, d_deg:float, d_km:float):
         """
         merge adjacent stations as one station
         d_deg : float
@@ -435,6 +437,16 @@ In this case, please set dist_in_data=True and read again.""")
 
         # number of unique stations after merging
         print('number of unique stations after merging: ', self.rec_points['staname'].nunique())
+
+    @classmethod
+    def from_seispy(cls, rf_path:str):
+        from .io.seispy import Seispy
+        sr = cls('src_rec')
+        seispyio = Seispy(rf_path)
+        seispyio._load_sta_info()
+        seispyio.get_rf_info()
+        sr.src_points, sr.rec_points = seispyio.to_src_rec_points()
+        return sr
 
 if __name__ == '__main__':
     sr = SrcRec.read('src_rec_file_checker_data_test1.dat_noised_evweighted')
