@@ -6,7 +6,7 @@ import tqdm
 
 class SrcRec():
 
-    def __init__(self, fname:str, src_only=False) -> None:
+    def __init__(self, fname='', src_only=False) -> None:
         """I/O for source <--> receiver file
 
         :param fname: Path to src_rec file
@@ -40,7 +40,7 @@ class SrcRec():
         :return: class of SrcRec
         :rtype: SrcRec
         """
-        sr = cls(fname, **kwargs)
+        sr = cls(fname=fname, **kwargs)
         alldf = pd.read_table(fname, sep='\s+|\t', engine='python',
                               header=None, comment="#")
 
@@ -440,11 +440,26 @@ In this case, please set dist_in_data=True and read again.""")
 
     @classmethod
     def from_seispy(cls, rf_path:str):
+        """Read and convert source and station information from
+        receiver function data calculated by Seispy
+
+        :param rf_path: Path to receiver functions calculated by Seispy
+        :type rf_path: str
+        :return: New instance of class SrcRec
+        :rtype: SrcRec
+        """
         from .io.seispy import Seispy
-        sr = cls('src_rec')
+        sr = cls()
+        # Initial an instance of Seispy
         seispyio = Seispy(rf_path)
+
+        # Load station info from SAC header
         seispyio._load_sta_info()
+
+        # Read finallist.dat
         seispyio.get_rf_info()
+
+        # Convert to SrcRec format
         sr.src_points, sr.rec_points = seispyio.to_src_rec_points()
         return sr
 
