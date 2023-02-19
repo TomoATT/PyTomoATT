@@ -6,7 +6,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 
-VERSION = "0.1.2"
+VERSION = "0.1.3"
 setup(name='PyTomoATT',
       version=VERSION,
       author='Mijian Xu, Masaru Nagaso',
@@ -19,7 +19,6 @@ setup(name='PyTomoATT',
       packages=find_packages(),
       install_requires=[
                 'numpy>=1.19.0',
-                'scipy>=1.9.1',
                 'pandas>=1.4.0',
                 'h5py',
                 'pyyaml',

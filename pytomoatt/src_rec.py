@@ -318,6 +318,34 @@ In this case, please set dist_in_data=True and read again.""")
         self.src_points.sort_values(by=['src_index'], inplace=True)
         self.rec_points.sort_values(by=['src_index', 'rec_index'], inplace=True)
 
+    def select_box_region(self, region):
+        """
+        Select sources and station in a box region
+        param region: Box region defined as [lon1, lon2, lat1, lat2]
+        :type region: iterable
+        """
+        # select source within this region.
+        self.src_points = self.src_points[
+            (self.src_points['evlo'] >= region[0]) &
+            (self.src_points['evlo'] <= region[1]) &
+            (self.src_points['evla'] >= region[2]) &
+            (self.src_points['evla'] <= region[3])
+        ]
+
+        # Remove receivers whose events have been removed 
+        self.remove_rec_by_new_src()
+
+        # Remove rest receivers out of region.
+        self.rec_points = self.rec_points[
+            (self.rec_points['stlo'] >= region[0]) &
+            (self.rec_points['stlo'] <= region[1]) &
+            (self.rec_points['stla'] >= region[2]) &
+            (self.rec_points['stla'] <= region[3])
+        ]
+
+        # Remove empty sources
+        self.src_points = self.src_points[self.src_points.index.isin(self.rec_points['src_index'])]
+
     def select_one_event_in_each_subgrid(self, d_deg:float, d_km:float):
         """
         select one event in each subgrid
@@ -437,6 +465,22 @@ In this case, please set dist_in_data=True and read again.""")
 
         # number of unique stations after merging
         print('number of unique stations after merging: ', self.rec_points['staname'].nunique())
+
+    def write_receivers(self, fname:str):
+        """
+        Write receivers to a txt file
+        :param fname: Path to output txt file of stations
+        """
+        recs = self.rec_points[['staname', 'stla', 'stlo', 'stel', 'weight']].drop_duplicates()
+        recs.to_csv(fname, sep=' ', header=False, index=False)
+
+    def write_sources(self, fname:str):
+        """
+        Write sources to a txt file
+        :param fname: Path to output txt file of sources
+        """
+        srcs = self.src_points[['event_id', 'evla', 'evlo', 'evdp', 'weight']]
+        srcs.to_csv(fname, sep=' ', header=False, index=False)
 
     @classmethod
     def from_seispy(cls, rf_path:str):
