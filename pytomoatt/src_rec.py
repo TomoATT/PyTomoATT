@@ -463,6 +463,12 @@ In this case, please set dist_in_data=True and read again.""")
         sr.src_points, sr.rec_points = seispyio.to_src_rec_points()
         return sr
 
+    # implemented in vis.py
+    def plot(self, weight=False, fname=None):
+        from .vis import plot_srcrec
+        return plot_srcrec(self, weight=weight, fname=fname)
+
+
 if __name__ == '__main__':
     sr = SrcRec.read('src_rec_file_checker_data_test1.dat_noised_evweighted')
     sr.write()
