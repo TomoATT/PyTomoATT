@@ -73,7 +73,7 @@ The pta commands are:
         parser.add_argument('input_params', help='The parameter file of TomoATT, The section \"domain\" will be read.')
         parser.add_argument('-o', help='Path to output model', default='model_crust1.0_vp.h5', metavar='fname')
         parser.add_argument('-s', help='Smooth the 3D model with a Gaussian filter,' 
-                            'Sigma is the standard division of the smoothing kernel',
+                            'Sigma is the standard division of the smoothing kernel, defaults to None',
                             default=None, type=float, metavar='sigma')
         args = parser.parse_args(sys.argv[2:])
         para = ATTPara(args.input_params)
