@@ -2,6 +2,7 @@ import numpy as np
 from os.path import dirname, abspath, join
 from scipy.interpolate import griddata
 from scipy.ndimage import gaussian_filter
+from ..utils import init_axis
 import h5py
 
 
@@ -58,22 +59,9 @@ class CrustModel():
         :param n_rtp: number of dimensions [ndep, nlat, nlon]
         :type n_rtp: list
         """
-        dd1 = min_max_dep[0]
-        dd2 = min_max_dep[1]
-        tt1 = min_max_lat[0]
-        tt2 = min_max_lat[1]
-        pp1 = min_max_lon[0]
-        pp2 = min_max_lon[1]
-
-        # Define interval of grid
-        dr = (dd2-dd1)/(n_rtp[0]-1)
-        dt = (tt2-tt1)/(n_rtp[1]-1)
-        dp = (pp2-pp1)/(n_rtp[2]-1)
-
-        # Define coordinates of each axis
-        self.dd = np.array([dd1 + x*dr for x in range(n_rtp[0])])
-        self.tt = np.array([tt1 + x*dt for x in range(n_rtp[1])])
-        self.pp = np.array([pp1 + x*dp for x in range(n_rtp[2])])
+        self.dd, self.tt, self.pp, _, _, _, = init_axis(
+            min_max_dep, min_max_lat, min_max_lon, n_rtp
+        )
 
         # Grid data 
         new_dep, new_lat, new_lon = np.meshgrid(self.dd, self.tt, self.pp, indexing='ij')
