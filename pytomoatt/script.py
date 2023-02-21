@@ -5,6 +5,8 @@ import argparse
 import argcomplete
 import sys
 from .src_rec import SrcRec
+from .io.crust import CrustModel
+from .para import ATTPara
 
 
 def init_project(path):
@@ -30,6 +32,7 @@ class PTA:
 The pta commands are:
 init_pjt      Initialize a new project for TomoATT
 gen_src_rec   Generate src_rec file from other format
+create_model  Create model for TomoATT
 ''')
         parser.add_argument('command', help='pta commands')
         argcomplete.autocomplete(parser)
@@ -59,6 +62,27 @@ gen_src_rec   Generate src_rec file from other format
                 print('{}'.format(e))
                 sys.exit(1)
             sr.write(args.o)
+
+    def create_model(self):
+        parser = argparse.ArgumentParser(description='Create model for TomoATT from internal models: CRUST1.0')
+        parser.add_argument('input_params', help='The parameter file of TomoATT, The section \"domain\" will be read.')
+        parser.add_argument('-o', help='Path to output model', default='model_crust1.0_vp.h5', metavar='fname')
+        parser.add_argument('-s', help='Smooth the 3D model with a Gaussian filter,' 
+                            'Sigma is the standard division of the smoothing kernel',
+                            default=None, type=float, metavar='sigma')
+        args = parser.parse_args(sys.argv[2:])
+        para = ATTPara(args.input_params)
+        cm = CrustModel()
+        cm.griddata(
+            para.input_params['domain']['min_max_depth'],
+            para.input_params['domain']['min_max_lat'],
+            para.input_params['domain']['min_max_lon'],
+            para.input_params['domain']['n_rtp'],
+        )
+        if args.s is not None:
+            cm.smooth(args.s)
+        cm.write(args.o)
+
 
 def main():
     PTA()
