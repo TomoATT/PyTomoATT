@@ -305,7 +305,7 @@ In this case, please set dist_in_data=True and read again.""")
         select interested phase and remove others
         phase_list : list of str
         """
-        if not isinstance(phase_list (list, str)):
+        if not isinstance(phase_list, (list, str)):
             raise TypeError('phase_list should be in list or str')
         print('rec_points before selecting: ', self.rec_points.shape)
         self.rec_points = self.rec_points[self.rec_points['phase'].isin(phase_list)]
