@@ -332,7 +332,7 @@ In this case, please set dist_in_data=True and read again.""")
             (self.src_points['evla'] <= region[3])
         ]
 
-        # Remove receivers whose events have been removed 
+        # Remove receivers whose events have been removed
         self.remove_rec_by_new_src()
 
         # Remove rest receivers out of region.
@@ -398,74 +398,80 @@ In this case, please set dist_in_data=True and read again.""")
         # reflect the total number of events for each station
         self.rec_points['num_events'] = self.rec_points.groupby('staname')['num_events'].transform('max')
 
-    def merge_adjacent_stations(self, d_deg:float, d_km:float):
-        """
-        merge adjacent stations as one station
-        d_deg : float
-            grid size in degree
-        d_km : float
-            grid size in km
-        """
+    #
+    # This function is comment out temprarly because it includes verified bug and not modified.
+    #
+    #def merge_adjacent_stations(self, d_deg:float, d_km:float):
+    #    """
+    #    merge adjacent stations as one station
+    #    d_deg : float
+    #        grid size in degree
+    #    d_km : float
+    #        grid size in km
+    #    """
 
-        # count the number of events per station
-        self.count_events_per_station()
+    #    # count the number of events per station
+    #    self.count_events_per_station()
 
-        # number of unique stations before merging
-        print('number of unique stations before merging: ', self.rec_points['staname'].nunique())
+    #    # number of unique stations before merging
+    #    print('number of unique stations before merging: ', self.rec_points['staname'].nunique())
 
-        # create 'lat_group', 'lon_group' and 'dep_group' columns from 'stla', 'stlo' and 'stel'
-        def create_groups(row, column, d):
-            return int(row[column]/d)
+    #    # create 'lat_group', 'lon_group' and 'dep_group' columns from 'stla', 'stlo' and 'stel'
+    #    def create_groups(row, column, d):
+    #        return int(row[column]/d)
 
-        self.rec_points['lat_group'] = self.rec_points.apply(lambda x: create_groups(x, 'stla', d_deg), axis=1)
-        self.rec_points['lon_group'] = self.rec_points.apply(lambda x: create_groups(x, 'stlo', d_deg), axis=1)
-        self.rec_points['dep_group'] = self.rec_points.apply(lambda x: create_groups(x, 'stel', d_km*1000), axis=1)
+    #    self.rec_points['lat_group'] = self.rec_points.apply(lambda x: create_groups(x, 'stla', d_deg), axis=1)
+    #    self.rec_points['lon_group'] = self.rec_points.apply(lambda x: create_groups(x, 'stlo', d_deg), axis=1)
+    #    self.rec_points['dep_group'] = self.rec_points.apply(lambda x: create_groups(x, 'stel', d_km*1000), axis=1)
 
-        # sort src_points by 'lat_group' and 'lon_group' and 'dep_group'
-        self.rec_points = self.rec_points.sort_values(by=['lat_group', 'lon_group', 'dep_group', 'num_events'], ascending=[True, True, True, False])
+    #    # sort src_points by 'lat_group' and 'lon_group' and 'dep_group'
+    #    self.rec_points = self.rec_points.sort_values(by=['lat_group', 'lon_group', 'dep_group', 'num_events'], ascending=[True, True, True, False])
 
-        # find all events in the same lat_group and lon_group and dep_group
-        # and copy the 'staname' 'stlo' 'stla' 'stel' to all rows within the same group from the row where 'count' is the largest
-        self.rec_points['staname'] = self.rec_points.groupby(['lat_group', 'lon_group', 'dep_group'])['staname'].transform(lambda x: x.iloc[0])
-        self.rec_points['stlo'] = self.rec_points.groupby(['lat_group', 'lon_group', 'dep_group'])['stlo'].transform(lambda x: x.iloc[0])
-        self.rec_points['stla'] = self.rec_points.groupby(['lat_group', 'lon_group', 'dep_group'])['stla'].transform(lambda x: x.iloc[0])
-        self.rec_points['stel'] = self.rec_points.groupby(['lat_group', 'lon_group', 'dep_group'])['stel'].transform(lambda x: x.iloc[0])
+    #    # find all events in the same lat_group and lon_group and dep_group
+    #    # and copy the 'staname' 'stlo' 'stla' 'stel' to all rows within the same group from the row where 'count' is the largest
+    #    self.rec_points['staname'] = self.rec_points.groupby(['lat_group', 'lon_group', 'dep_group'])['staname'].transform(lambda x: x.iloc[0])
+    #    self.rec_points['stlo'] = self.rec_points.groupby(['lat_group', 'lon_group', 'dep_group'])['stlo'].transform(lambda x: x.iloc[0])
+    #    self.rec_points['stla'] = self.rec_points.groupby(['lat_group', 'lon_group', 'dep_group'])['stla'].transform(lambda x: x.iloc[0])
+    #    self.rec_points['stel'] = self.rec_points.groupby(['lat_group', 'lon_group', 'dep_group'])['stel'].transform(lambda x: x.iloc[0])
 
-        # drop 'lat_group' and 'lon_group' and 'dep_group'
-        self.rec_points = self.rec_points.drop(columns=['lat_group', 'lon_group', 'dep_group'])
+    #    # drop 'lat_group' and 'lon_group' and 'dep_group'
+    #    self.rec_points = self.rec_points.drop(columns=['lat_group', 'lon_group', 'dep_group'])
 
-        # sort
-        self.rec_points = self.rec_points.sort_values(by=['src_index','rec_index'])
+    #    # sort
+    #    self.rec_points = self.rec_points.sort_values(by=['src_index','rec_index'])
 
-        # update the num_events
-        self.count_events_per_station()
+    #    # update the num_events
+    #    self.count_events_per_station()
 
-        # number of unique stations after merging
-        print('number of unique stations after merging: ', self.rec_points['staname'].nunique())
+    #    # number of unique stations after merging
+    #    print('number of unique stations after merging: ', self.rec_points['staname'].nunique())
 
-    def merge_duplicated_station(self):
-        """
-        merge duplicated stations as one station
-        duplicated stations are defined as stations with the same staname
-        """
+    #
+    # This function is comment out temprarly because it includes verified bug and not modified.
+    #
+    #def merge_duplicated_station(self):
+    #    """
+    #    merge duplicated stations as one station
+    #    duplicated stations are defined as stations with the same staname
+    #    """
 
-        # number of unique stations before merging
-        print('number of unique stations before merging: ', self.rec_points['staname'].nunique())
+    #    # number of unique stations before merging
+    #    print('number of unique stations before merging: ', self.rec_points['staname'].nunique())
 
-        # sort rec_points by 'src_index' then 'staname'
-        self.rec_points = self.rec_points.sort_values(by=['src_index', 'staname'])
+    #    # sort rec_points by 'src_index' then 'staname'
+    #    self.rec_points = self.rec_points.sort_values(by=['src_index', 'staname'])
 
-        # find all duplicated stations in each src_index and drop except the first one
-        self.rec_points = self.rec_points.drop_duplicates(subset=['src_index', 'staname'], keep='first')
+    #    # find all duplicated stations in each src_index and drop except the first one
+    #    self.rec_points = self.rec_points.drop_duplicates(subset=['src_index', 'staname'], keep='first')
 
-        # sort rec_points by 'src_index' then 'rec_index'
-        self.rec_points = self.rec_points.sort_values(by=['src_index', 'rec_index'])
+    #    # sort rec_points by 'src_index' then 'rec_index'
+    #    self.rec_points = self.rec_points.sort_values(by=['src_index', 'rec_index'])
 
-        # update the num_events
-        self.count_events_per_station()
+    #    # update the num_events
+    #    self.count_events_per_station()
 
-        # number of unique stations after merging
-        print('number of unique stations after merging: ', self.rec_points['staname'].nunique())
+    #    # number of unique stations after merging
+    #    print('number of unique stations after merging: ', self.rec_points['staname'].nunique())
 
     def write_receivers(self, fname:str):
         """
