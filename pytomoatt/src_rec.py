@@ -305,7 +305,7 @@ In this case, please set dist_in_data=True and read again.""")
         select interested phase and remove others
         phase_list : list of str
         """
-        if not isinstance(phase_list (list, str)):
+        if not isinstance(phase_list, (list, str)):
             raise TypeError('phase_list should be in list or str')
         print('rec_points before selecting: ', self.rec_points.shape)
         self.rec_points = self.rec_points[self.rec_points['phase'].isin(phase_list)]
@@ -507,6 +507,12 @@ In this case, please set dist_in_data=True and read again.""")
         # Convert to SrcRec format
         sr.src_points, sr.rec_points = seispyio.to_src_rec_points()
         return sr
+
+    # implemented in vis.py
+    def plot(self, weight=False, fname=None):
+        from .vis import plot_srcrec
+        return plot_srcrec(self, weight=weight, fname=fname)
+
 
 if __name__ == '__main__':
     sr = SrcRec.read('src_rec_file_checker_data_test1.dat_noised_evweighted')
