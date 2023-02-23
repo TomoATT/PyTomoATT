@@ -30,20 +30,6 @@ class CrustModel():
         with h5py.File(fname) as f:
             self.points = f['model'][:]
 
-    # def model2points(self):
-    #     """convert to points with 4 columns of [dep, lat, lon, vp]
-    #     """
-    #     self.points = np.empty([0, 4])
-    #     for i, lat in enumerate(self.mod_lat):
-    #         for j, lon in enumerate(self.mod_lon):
-    #             all_dep = self.mod_data[i][j]['depth']
-    #             all_vp = self.mod_data[i][j]['vp']
-    #             for k, dep in enumerate(all_dep):   
-    #                 self.points = np.vstack([
-    #                     self.points,
-    #                     [dep, lat, lon, all_vp[k]]
-    #                 ])
-
     def griddata(self, min_max_dep, min_max_lat, min_max_lon, n_rtp, type='vp'):
         """Linearly interpolate velocity into regular grids
 

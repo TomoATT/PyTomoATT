@@ -4,7 +4,8 @@ from .utils import init_axis, sind, cosd
 
 
 class Checker():
-    def __init__(self, fname) -> None:
+    def __init__(self, fname:str) -> None:
+        self.model_file = fname
         with h5py.File(fname) as f:
             self.vel = f['vel'][:]
             self.eta = f['eta'][:]
@@ -106,6 +107,8 @@ class Checker():
         self.eta = self.epsilon*sind(2*self.phi)
 
     def write(self, fname):
+        if fname is None:
+            fname = '.'.join(self.model_file.split('.')[:-1])+'_pert.h5'
         with h5py.File(fname, 'w') as f:
             f.create_dataset('xi', data=self.xi)
             f.create_dataset('eta', data=self.eta)

@@ -97,9 +97,9 @@ The pta commands include:
         parser.add_argument('-n', help='nx, ny and nz pairs of anomalies along X, Y and Z', metavar='nx/ny/nz', required=True)
         parser.add_argument('-p', help='Amplitude of perturbations for velocity (pert_vel) and anisotropy (pert_ani)', 
                             metavar='pert_vel/pert_ani', default='0.08/0.04')
-        parser.add_argument('-o', help='Path to output perturbed model', default='model_pert.h5', metavar='fname')
+        parser.add_argument('-o', help='Path to output perturbed model', default=None, metavar='fname')
         parser.add_argument('-x', help='Upper and low bound for X direction', default=None, metavar='xmin/xmax')
-        parser.add_argument('-y', help='Upper and low bound for Y direction', default=None, metavar='ymin/zmax')
+        parser.add_argument('-y', help='Upper and low bound for Y direction', default=None, metavar='ymin/ymax')
         parser.add_argument('-z', help='Upper and low bound for Z direction', default=None, metavar='zmin/zmax')
         args = parser.parse_args(sys.argv[2:])
         para = ATTPara(args.input_params)
