@@ -17,7 +17,7 @@ inversion :
   run_mode : 1 # 0 for forward simulation only, 1 for inversion
   optim_method : 1 # optimization method. 0 : "grad_descent", 1 : "halve-stepping", 2 : "lbfgs"
   n_inversion_grid : 5  # number of inversion grid sets
-  n_inv_rtp : [11,10,10] # number of the base inversion grid points
+  n_inv_dep_lat_lon : [11,10,10] # number of the base inversion grid points
   min_max_dep_inv : [-29.0, 301.0] # depth in km with R = 6371.0
   min_max_lat_inv : [30.0,50.0] # latitude in degree
   min_max_lon_inv : [15.0,40.0] # longitude in degree
@@ -32,8 +32,8 @@ parallel :
   nproc_sub : 1      # number of subprocess used for each subdomain
 
 calculation :
-  convergence_tolerance : 1e-3
-  max_iterations : 100
+  convergence_tolerance : 1e-5
+  max_iterations : 500
   stencil_order : 1 # 1 or 3
   stencil_type : 1 
   sweep_type : 0    # 0: legacy, 1: cuthill-mckee. 2: cuthill-mckee with shm parallelization
