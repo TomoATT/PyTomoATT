@@ -34,7 +34,8 @@ parallel :
 calculation :
   convergence_tolerance : 1e-3
   max_iterations : 100
-  stencil_order : 3 # 1 or 3
+  stencil_order : 1 # 1 or 3
+  stencil_type : 1 
   sweep_type : 0    # 0: legacy, 1: cuthill-mckee. 2: cuthill-mckee with shm parallelization
   output_file_format : 0 # 0: hdf5, 1: ascii
 
