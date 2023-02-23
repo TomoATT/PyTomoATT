@@ -21,33 +21,30 @@ def find_adjacent_point(points, array):
 
 
 class CrustModel():
-    def __init__(self, fname=join(dirname(dirname(abspath(__file__))), 'data', 'crust1.0-vp.npz')) -> None:
+    def __init__(self, fname=join(dirname(dirname(abspath(__file__))), 'data', 'crust1.0.h5')) -> None:
         """Read internal CRUST1.0 model
 
         :param fname: _description_, defaults to join(dirname(dirname(abspath(__file__))), 'data', 'crust1.0-vp.npz')
         :type fname: str, optional
         """
-        self.model = np.load(fname, allow_pickle=True)
-        self.mod_data = self.model['data']
-        self.mod_lat = self.model['lat']
-        self.mod_lon = self.model['lon']
-        self.model2points()
+        with h5py.File(fname) as f:
+            self.points = f['model'][:]
 
-    def model2points(self):
-        """convert to points with 4 columns of [dep, lat, lon, vp]
-        """
-        self.points = np.empty([0, 4])
-        for i, lat in enumerate(self.mod_lat):
-            for j, lon in enumerate(self.mod_lon):
-                all_dep = self.mod_data[i][j]['depth']
-                all_vp = self.mod_data[i][j]['vp']
-                for k, dep in enumerate(all_dep):   
-                    self.points = np.vstack([
-                        self.points,
-                        [dep, lat, lon, all_vp[k]]
-                    ])
+    # def model2points(self):
+    #     """convert to points with 4 columns of [dep, lat, lon, vp]
+    #     """
+    #     self.points = np.empty([0, 4])
+    #     for i, lat in enumerate(self.mod_lat):
+    #         for j, lon in enumerate(self.mod_lon):
+    #             all_dep = self.mod_data[i][j]['depth']
+    #             all_vp = self.mod_data[i][j]['vp']
+    #             for k, dep in enumerate(all_dep):   
+    #                 self.points = np.vstack([
+    #                     self.points,
+    #                     [dep, lat, lon, all_vp[k]]
+    #                 ])
 
-    def griddata(self, min_max_dep, min_max_lat, min_max_lon, n_rtp):
+    def griddata(self, min_max_dep, min_max_lat, min_max_lon, n_rtp, type='vp'):
         """Linearly interpolate velocity into regular grids
 
         :param min_max_dep: min and max depth, ``[min_dep, max_dep]``
@@ -58,16 +55,25 @@ class CrustModel():
         :type min_max_lon: list
         :param n_rtp: number of dimensions [ndep, nlat, nlon]
         :type n_rtp: list
+        :param type: Type of velocity. Only vp and vs are available 
+        :type type: str
         """
+        self.n_rtp = [int(n) for n in n_rtp]
+        self.type = type
+        if type == 'vp':
+            col = 3
+        else:
+            col = 4
         self.dd, self.tt, self.pp, _, _, _, = init_axis(
             min_max_dep, min_max_lat, min_max_lon, n_rtp
         )
 
         # Grid data 
         new_dep, new_lat, new_lon = np.meshgrid(self.dd, self.tt, self.pp, indexing='ij')
+        print('Grid data, please wait a few minute')
         grid_vp = griddata(
             self.points[:, 0:3],
-            self.points[:, 3], 
+            self.points[:, col], 
             (new_dep, new_lat, new_lon), 
             method='linear'
         )
@@ -91,12 +97,14 @@ class CrustModel():
     def smooth(self, sigma=5):
         self.vel = gaussian_filter(self.vel, sigma)
 
-    def write(self, fname='model_crust1.0.h5'):
+    def write(self, fname=None):
         """Write to h5 file with TomoATT format.
 
         :param fname: file name of output model, defaults to 'model_crust1.0.h5'
         :type fname: str, optional
         """
+        if fname is None:
+            fname = 'Sub_CRUST1.0_{}_{:d}_{:d}_{:d}.h5'.format(self.type, *self.n_rtp)
         with h5py.File(fname, 'w') as f:
             f.create_dataset('eta', data=self.eta)
             f.create_dataset('xi', data=self.xi)

@@ -129,3 +129,5 @@ dmypy.json
 .pyre/
 .vscode
 .DS_store
+crust_model/
+*.xmf

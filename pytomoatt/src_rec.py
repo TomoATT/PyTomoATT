@@ -510,6 +510,15 @@ In this case, please set dist_in_data=True and read again.""")
 
     # implemented in vis.py
     def plot(self, weight=False, fname=None):
+        """Plot source and receivers for preview
+
+        :param weight: _description_, defaults to False
+        :type weight: bool, optional
+        :param fname: _description_, defaults to None
+        :type fname: _type_, optional
+        :return: _description_
+        :rtype: _type_
+        """
         from .vis import plot_srcrec
         return plot_srcrec(self, weight=weight, fname=fname)
 

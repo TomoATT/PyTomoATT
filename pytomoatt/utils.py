@@ -35,17 +35,36 @@ def atand(x):
     return np.degrees(rad)
 
 
-def cartesian_to_spherical(x,y,z):
-    ro=6371.0
-    lon=x
-    lat=y
-    dep=z
-    cola=90.-lat
-    r=ro-dep
-    x1 = r*sind(cola)*cosd(lon)
-    y1 = r*sind(cola)*sind(lon)
-    z1 = r*cosd(cola)
-    return x1, y1, z1
+def WGS84_to_cartesian(dep, lat, lon):
+    """
+    Convert WGS84 coordinates to cartesian coordinates
+    """
+
+    # equatorial radius WGS84 major axis
+    equRadius = 6371.0
+    flattening = 1.0 / 298.257222101
+    sqrEccentricity = flattening * (2.0 - flattening)
+
+    # convert to radians
+    lat = np.deg2rad(lat)
+    lon = np.deg2rad(lon)
+    # convert depth to altitude
+    alt = -dep
+
+    sinLat = np.sin(lat)
+    cosLat = np.cos(lat)
+    sinLon = np.sin(lon)
+    cosLon = np.cos(lon)
+
+    # Normalize the radius of curvature
+    normRadius = equRadius / np.sqrt(1.0 - sqrEccentricity * sinLat * sinLat)
+
+    # convert to cartesian coordinates
+    x = (normRadius + alt) * cosLat * cosLon
+    y = (normRadius + alt) * cosLat * sinLon
+    z = (normRadius * (1.0 - sqrEccentricity) + alt) * sinLat
+
+    return x, y, z
 
 
 def init_axis(min_max_dep, min_max_lat, min_max_lon, n_rtp):
@@ -85,7 +104,7 @@ def to_vtk(fname:str, model:dict, dep, lat, lon):
     except:
         raise ModuleNotFoundError('Please install pyvista before')
     dd, tt, pp = np.meshgrid(dep, lat, lon, indexing='ij')
-    x, y, z = cartesian_to_spherical(pp, tt, dd)
+    x, y, z = WGS84_to_cartesian(dd, tt, pp)
     grid = pv.StructuredGrid(x, y, z)
     for key, value in model.items():
         grid.point_data[key] = value[:].flatten(order="F")

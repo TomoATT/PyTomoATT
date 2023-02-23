@@ -32,7 +32,7 @@ class PTA:
     def __init__(self) -> None:
         parser = argparse.ArgumentParser(
         usage='''pta <command> [<args>]
-The pta commands are:
+The pta commands include:
 \033[1minit_pjt\033[0m              Initialize a new project for TomoATT
 \033[1mgen_src_rec\033[0m           Generate src_rec file from other format
 \033[1mcreate_model\033[0m          Create model for TomoATT
@@ -71,10 +71,11 @@ The pta commands are:
     def create_model(self):
         parser = argparse.ArgumentParser(description='Create model for TomoATT from internal models: CRUST1.0')
         parser.add_argument('input_params', help='The parameter file of TomoATT, The section \"domain\" will be read.')
-        parser.add_argument('-o', help='Path to output model', default='model_crust1.0_vp.h5', metavar='fname')
+        parser.add_argument('-o', help='Path to output model, defaults to Sub_CRUST1.0_nr_nt_np.h5', default=None, metavar='fname')
         parser.add_argument('-s', help='Smooth the 3D model with a Gaussian filter,' 
                             'Sigma is the standard division of the smoothing kernel, defaults to None',
                             default=None, type=float, metavar='sigma')
+        parser.add_argument('-t', help='Type of velocity vp or vs are available', default='vp', metavar='vel_type')
         args = parser.parse_args(sys.argv[2:])
         para = ATTPara(args.input_params)
         cm = CrustModel()
@@ -83,6 +84,7 @@ The pta commands are:
             para.input_params['domain']['min_max_lat'],
             para.input_params['domain']['min_max_lon'],
             para.input_params['domain']['n_rtp'],
+            args.t
         )
         if args.s is not None:
             cm.smooth(args.s)
