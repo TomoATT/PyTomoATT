@@ -345,6 +345,7 @@ In this case, please set dist_in_data=True and read again.""")
 
         # Remove empty sources
         self.src_points = self.src_points[self.src_points.index.isin(self.rec_points['src_index'])]
+        self.update_num_rec()
 
     def select_one_event_in_each_subgrid(self, d_deg:float, d_km:float):
         """
