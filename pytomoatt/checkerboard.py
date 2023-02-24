@@ -30,7 +30,7 @@ class Checker():
 
     def _ceeate_taper(self, xleft, xright, type='d'):
         if type == 'd':
-            x = self.dd; dx = self.dr
+            x = np.flip(self.dd); dx = self.dr
         elif type == 't':
             x = self.tt; dx = self.dt
         elif type == 'p':
@@ -91,7 +91,7 @@ class Checker():
             ntaper_left = 0
             ntaper_right = 0
         z_pert = np.zeros_like(self.dd)
-        z_pert[ntaper_left:self.dd.size-ntaper_right] = \
+        z_pert[ntaper_right::self.dd.size-ntaper_left] = \
             np.sin(period_z*2*np.pi*np.arange(self.dd.size-(ntaper_left+ntaper_right))/ \
             (self.dd.size-(ntaper_left+ntaper_right)))
 
