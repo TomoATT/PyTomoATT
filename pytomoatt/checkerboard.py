@@ -91,7 +91,7 @@ class Checker():
             ntaper_left = 0
             ntaper_right = 0
         z_pert = np.zeros_like(self.dd)
-        z_pert[ntaper_right::self.dd.size-ntaper_left] = \
+        z_pert[ntaper_right:self.dd.size-ntaper_left] = \
             np.sin(period_z*2*np.pi*np.arange(self.dd.size-(ntaper_left+ntaper_right))/ \
             (self.dd.size-(ntaper_left+ntaper_right)))
 
