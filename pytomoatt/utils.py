@@ -92,7 +92,7 @@ def init_axis(min_max_dep, min_max_lat, min_max_lon, n_rtp):
     dp = (pp2-pp1)/(n_rtp[2]-1)
 
     # Define coordinates of each axis
-    dd = np.array([dd1 + x*dr for x in range(n_rtp[0])])
+    dd = np.flip(np.array([dd1 + x*dr for x in range(n_rtp[0])]))
     tt = np.array([tt1 + x*dt for x in range(n_rtp[1])])
     pp = np.array([pp1 + x*dp for x in range(n_rtp[2])])
 
