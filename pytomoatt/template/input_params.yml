@@ -1,45 +1,79 @@
-version : 2
+version: 2
 
-domain :
-  min_max_dep : [-29.0, 301.0] # depth in km with R = 6371.0
-  min_max_lat : [28.5,51.5]    # latitude in degree
-  min_max_lon : [13.5,41.5]    # longitude in degree
-  n_rtp : [55,55,55]           # number of nodes
+domain:
+   min_max_dep: [-10, 10]    # depth in km
+   min_max_lat: [37.7, 42.3] # latitude in degree
+   min_max_lon: [22.7, 27.3] # longitude in degree
+   n_rtp: [10, 50, 50]       # number of nodes in depth,latitude,longitude direction
 
-source :
-  src_rec_file : 'src_rec_test_out.dat' # source receiver file (if found, src_dep_lat_lon is ignored)
-  swap_src_rec : 1                      # swap source and receiver
+source:
+   src_rec_file: src_rec_test.dat # source receiver file path
+   swap_src_rec: 1 # swap source and receiver (1: yes, 0: no)
 
-model :
-  init_model_path : './test_model_init.h5' # path to initial model file (ignored if init_model_type is '1d_*')
+model:
+   init_model_path: ./test_model_true.h5 # path to initial model file
+#   model_1d_name: dummy_model_1d_name # 1D model name used in teleseismic 2D solver (iasp91, ak135, user_defined is available), defined in include/1d_model.h
 
-inversion :
-  run_mode : 1 # 0 for forward simulation only, 1 for inversion
-  optim_method : 1 # optimization method. 0 : "grad_descent", 1 : "halve-stepping", 2 : "lbfgs"
-  n_inversion_grid : 5  # number of inversion grid sets
-  n_inv_dep_lat_lon : [11,10,10] # number of the base inversion grid points
-  min_max_dep_inv : [-29.0, 301.0] # depth in km with R = 6371.0
-  min_max_lat_inv : [30.0,50.0] # latitude in degree
-  min_max_lon_inv : [15.0,40.0] # longitude in degree
-  max_sub_iterations : 100 # maximum number of sub-iterations
-  max_iterations_inv : 100  # maximum number of inversion iterations
-  step_size : 0.01  # step size for inversion
+inversion:
+   run_mode: 0                 # 0 for forward simulation only, 1 for inversion
+   output_dir: ./OUTPUT_FILES/ # path to output director (default is ./OUTPUT_FILES/)
+   optim_method: 0             # optimization method. 0 : grad_descent, 1 : halve-stepping, 2 : lbfgs (EXPERIMENTAL)
+   max_iterations_inv: 1       # maximum number of inversion iterations
+   step_size: 0.01             # initial step size for model update
+   step_size_sc: 0.001         # ...
+   step_size_decay: 0.9        # ...
+   smooth_method: 0            # 0: multiparametrization, 1: laplacian smoothing (EXPERIMENTAL)
 
+   # parameters for multiparametric inversion
+   n_inversion_grid: 1 # number of inversion grid sets
+   n_inv_dep_lat_lon: [1, 1, 1] # number of the base inversion grid points
+#   sta_correction_file: dummy_sta_correction_file # station correction file path
+   type_dep_inv: 0 # 0: uniform inversion grid, 1: flexible grid
+   type_lat_inv: 0 # 0: uniform inversion grid, 1: flexible grid
+   type_lon_inv: 0 # 0: uniform inversion grid, 1: flexible grid
 
-parallel :
-  n_sims : 1         # number of simultaneous run
-  ndiv_rtp : [1,2,4] # number of subdomains
-  nproc_sub : 1      # number of subprocess used for each subdomain
+   # parameters for uniform inversion grid
+   min_max_dep_inv: [-10, 10]    # depth in km (Radius of the earth is defined in config.h/R_earth)
+   min_max_lat_inv: [37.7, 42.3] # latitude in degree
+   min_max_lon_inv: [22.7, 27.3] # longitude in degree
 
-calculation :
-  convergence_tolerance : 1e-5
-  max_iterations : 500
-  stencil_order : 1 # 1 or 3
-  stencil_type : 1 
-  sweep_type : 0    # 0: legacy, 1: cuthill-mckee. 2: cuthill-mckee with shm parallelization
-  output_file_format : 0 # 0: hdf5, 1: ascii
+   # parameters for flexible inversion grid
+#   n_inv_r_flex: 3
+#   dep_inv: [1, 1, 1]
+#   n_inv_t_flex: 3
+#   lat_inv: [1, 1, 1]
+#   n_inv_p_flex: 3
+#   lon_inv: [1, 1, 1]
 
-output_setting :
-  is_output_source_field : 0      # output the calculated field of all sources                            1 for yes; 0 for no;  default: 1
-  is_verbose_output : 0           # output internal parameters, if no, only model parameters are out.     1 for yes; 0 for no;  default: 0
-  is_output_model_dat : 0         # output model_parameters_inv_0000.dat or not.                          1 for yes; 0 for no;  default: 1
+   # parameters for halve-stepping or lbfg mode
+   max_sub_iterations: 20     # maximum number of each sub-iteration
+   l_smooth_rtp: [1, 1, 1]    # smoothing coefficients for laplacian smoothing
+   regularization_weight: 0.5 # weight value for regularization (lbfgs mode only)
+
+inv_strategy: # flags for selecting the target parameters to be inversed
+   is_inv_slowness: 1 # 1: slowness value will be calculated in inversion, 0: will not be calculated
+   is_inv_azi_ani: 1  # 1: azimuth anisotropy value will be calculated in inversion, 0: will not be calculated
+   is_inv_rad_ani: 0  # flag for radial anisotropy (Not implemented yet)
+   kernel_taper: [-1e+07, -1e+07]
+   is_sta_correction: 0
+
+parallel: # parameters for parallel computation
+   n_sims: 2           # number of simultanoues runs
+   ndiv_rtp: [1, 2, 1] # number of subdivision on each direction
+   nproc_sub: 2        # number of processors for sweep parallelization
+   use_gpu: 0          # 1 if use gpu (EXPERIMENTAL)
+
+calculation:
+   convergence_tolerance: 0.0001 # threshold value for checking the convergence for each forward/adjoint run
+   max_iterations: 500           # number of maximum iteration for each forward/adjoint run
+   stencil_order: 3              # order of stencil, 1 or 3
+   stencil_type: 0               # 0: , 1: first-order upwind scheme (only sweep_type 0 is supported)
+   sweep_type: 1                 # 0: legacy, 1: cuthill-mckee with shm parallelization
+   output_file_format: 0         # 0: hdf5, 1: ASCII
+
+output_setting:
+   is_output_source_field: 0 # output the calculated field of all sources                            1 for yes; 0 for no;  default: 1
+   is_output_model_dat: 0    # output model_parameters_inv_0000.dat or not.                          1 for yes; 0 for no;  default: 1
+   is_verbose_output: 0      # output internal parameters, if no, only model parameters are out.     1 for yes; 0 for no;  default: 0
+   is_output_final_model: 1  # output merged final model or not.                                     1 for yes; 0 for no;  default: 1
+   is_output_in_process: 1   # output model at each inv iteration or not.                            1 for yes; 0 for no;  default: 1
