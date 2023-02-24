@@ -56,7 +56,7 @@ class CrustModel():
 
         # Grid data 
         new_dep, new_lat, new_lon = np.meshgrid(self.dd, self.tt, self.pp, indexing='ij')
-        print('Grid data, please wait a few minute')
+        print('Grid data, please wait a few minutes')
         grid_vp = griddata(
             self.points[:, 0:3],
             self.points[:, col], 
