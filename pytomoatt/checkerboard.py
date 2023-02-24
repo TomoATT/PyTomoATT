@@ -11,7 +11,7 @@ class Checker():
             self.eta = f['eta'][:]
             self.xi = f['xi'][:]
             self.zeta = f['zeta'][:]
-        
+
     def init_axis(self, min_max_dep, min_max_lat, min_max_lon, n_rtp):
         """Initialize axis
 
@@ -28,7 +28,7 @@ class Checker():
             min_max_dep, min_max_lat, min_max_lon, n_rtp
         )
 
-    def _ceeate_taper(self, xleft, xright, type='d'):
+    def _create_taper(self, xleft, xright, type='d'):
         if type == 'd':
             x = np.flip(self.dd); dx = self.dr
         elif type == 't':
@@ -43,7 +43,7 @@ class Checker():
         ntaper_right = int((x[-1]-xright)/dx)
         return ntaper_left, ntaper_right
 
-    def checkerboard(self, period_x, period_y, period_z, 
+    def checkerboard(self, period_x, period_y, period_z,
                      pert_vel=0.08, pert_ani=0.04,
                      lim_x=None, lim_y=None, lim_z=None):
         """Create checkerboard
@@ -66,7 +66,7 @@ class Checker():
         :type lim_z: list, optional
         """
         if lim_x is not None:
-            ntaper_left, ntaper_right = self._ceeate_taper(*lim_x, type='p')
+            ntaper_left, ntaper_right = self._create_taper(*lim_x, type='p')
         else:
             ntaper_left = 0
             ntaper_right = 0
@@ -74,9 +74,9 @@ class Checker():
         x_pert[ntaper_left:self.pp.size-ntaper_right] = \
             np.sin(period_x*2*np.pi*np.arange(self.pp.size-(ntaper_left+ntaper_right))/ \
             (self.pp.size-(ntaper_left+ntaper_right)))
-        
+
         if lim_y is not None:
-            ntaper_left, ntaper_right = self._ceeate_taper(*lim_y, type='t')
+            ntaper_left, ntaper_right = self._create_taper(*lim_y, type='t')
         else:
             ntaper_left = 0
             ntaper_right = 0
@@ -84,9 +84,9 @@ class Checker():
         y_pert[ntaper_left:self.tt.size-ntaper_right] = \
             np.sin(period_y*2*np.pi*np.arange(self.tt.size-(ntaper_left+ntaper_right))/ \
             (self.tt.size-(ntaper_left+ntaper_right)))
-        
+
         if lim_z is not None:
-            ntaper_left, ntaper_right = self._ceeate_taper(*lim_z, type='d')
+            ntaper_left, ntaper_right = self._create_taper(*lim_z, type='d')
         else:
             ntaper_left = 0
             ntaper_right = 0
