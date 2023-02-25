@@ -98,11 +98,31 @@ def init_axis(min_max_dep, min_max_lat, min_max_lon, n_rtp):
 
     return dd, tt, pp, dr, dt, dp
 
+
+def xieta2ani(self, xi, eta):
+    epsilon = np.sqrt(eta**2+xi**2)
+    phi = 0.5*asind(eta/epsilon)
+    return epsilon, phi
+
 def to_vtk(fname:str, model:dict, dep, lat, lon):
+    """convert model initial model VTK file
+
+    :param fname: _description_
+    :type fname: str
+    :param model: _description_
+    :type model: dict
+    :param dep: _description_
+    :type dep: _type_
+    :param lat: _description_
+    :type lat: _type_
+    :param lon: _description_
+    :type lon: _type_
+    :raises ModuleNotFoundError: _description_
+    """
     try:
         import pyvista as pv
     except:
-        raise ModuleNotFoundError('Please install pyvista before')
+        raise ModuleNotFoundError('Please install pyvista first')
     dd, tt, pp = np.meshgrid(np.flip(dep), lat, lon, indexing='ij')
     x, y, z = WGS84_to_cartesian(dd, tt, pp)
     grid = pv.StructuredGrid(x, y, z)
