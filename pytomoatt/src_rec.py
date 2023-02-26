@@ -473,6 +473,19 @@ In this case, please set dist_in_data=True and read again.""")
     #    # number of unique stations after merging
     #    print('number of unique stations after merging: ', self.rec_points['staname'].nunique())
 
+    def add_noise(self, range_in_sec=0.1):
+        """Add random noise on travel time
+
+        :param range_in_sec: Maximun noise in sec, defaults to 0.1
+        :type range_in_sec: float, optional
+        """
+        noise = np.random.uniform(
+            low=-range_in_sec,
+            high=range_in_sec,
+            size=self.rec_points.shape[0]
+        )
+        self.rec_points['tt'] += noise
+
     def write_receivers(self, fname:str):
         """
         Write receivers to a txt file
