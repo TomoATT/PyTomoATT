@@ -1,7 +1,6 @@
 import numpy as np
 from os.path import dirname, abspath, join
 from scipy.interpolate import griddata
-from scipy.ndimage import gaussian_filter
 from ..utils import init_axis
 import h5py
 
@@ -56,7 +55,7 @@ class CrustModel():
 
         # Grid data 
         new_dep, new_lat, new_lon = np.meshgrid(self.dd, self.tt, self.pp, indexing='ij')
-        print('Grid data, please wait a few minutes')
+        print('Grid data, please wait for a few minutes')
         grid_vp = griddata(
             self.points[:, 0:3],
             self.points[:, col], 
@@ -75,27 +74,9 @@ class CrustModel():
                 grid_vp[:, i, j] = vp_dep
 
         # output
-        self.eta = np.zeros(n_rtp)
-        self.xi = np.zeros(n_rtp)
-        self.zeta = np.zeros(n_rtp)
-        self.vel = grid_vp
+        vel = grid_vp
 
-    def smooth(self, sigma=5):
-        self.vel = gaussian_filter(self.vel, sigma)
-
-    def write(self, fname=None):
-        """Write to h5 file with TomoATT format.
-
-        :param fname: file name of output model, defaults to 'model_crust1.0.h5'
-        :type fname: str, optional
-        """
-        if fname is None:
-            fname = 'Sub_CRUST1.0_{}_{:d}_{:d}_{:d}.h5'.format(self.type, *self.n_rtp)
-        with h5py.File(fname, 'w') as f:
-            f.create_dataset('eta', data=self.eta)
-            f.create_dataset('xi', data=self.xi)
-            f.create_dataset('zeta', data=self.zeta)
-            f.create_dataset('vel', data=self.vel)
+        return vel
 
 
 if __name__ == '__main__':

@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.interpolate import griddata
 
 def sind(deg):
     rad = np.radians(deg)
@@ -129,3 +130,20 @@ def to_vtk(fname:str, model:dict, dep, lat, lon):
     for key, value in model.items():
         grid.point_data[key] = value[:].flatten(order="F")
     grid.save(fname)
+
+
+def ignore_nan_3d(data):
+    index = np.where(~np.isnan(data))
+    values = data[index]
+    points = np.array(index).T
+    zidx = np.arange(data.shape[0])
+    yidx = np.arange(data.shape[1])
+    xidx = np.arange(data.shape[2])
+    zz, xx, yy = np.meshgrid(zidx, yidx, xidx, indexing='ij')
+    interpolated = griddata(
+        points, values, 
+        (zz, xx, yy), 
+        method='nearest'
+    )
+    result = interpolated.reshape(data.shape)
+    return result

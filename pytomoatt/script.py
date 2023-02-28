@@ -6,7 +6,7 @@ import argcomplete
 import sys
 import h5py
 from .src_rec import SrcRec
-from .io.crust import CrustModel
+from .model import Model
 from .para import ATTPara
 from .utils import to_vtk, init_axis
 from .checkerboard import Checker
@@ -69,26 +69,36 @@ The pta commands include:
             sr.write(args.o)
 
     def create_model(self):
-        parser = argparse.ArgumentParser(description='Create model for TomoATT from internal models: CRUST1.0')
+        parser = argparse.ArgumentParser(description='Create model for TomoATT from external models: CRUST1.0 or custom model\n'
+                                         'ex2 (custom model): pta create_model -m2 -i USTClitho2.0.txt -o t.h5 -s3 input_params.yml')
         parser.add_argument('input_params', help='The parameter file of TomoATT, The section \"domain\" will be read.')
+        parser.add_argument('-m', help='Background model type. 1 for CRUST1.0, 2 for custom ASCII file, defaults to 1',
+                            default=1, type=int, metavar='1|2')
+        parser.add_argument('-i', help='Path to input custom model with ASCII format, only valid for -m2', metavar='fname')
+        parser.add_argument('-c', help='Columns used in custom model file, order by lon/lat/dep/vel. defaults to 0/1/2/3',
+                            default='0/1/2/3', metavar='ncol_lon/ncol_lat/ncol_dep/ncol_vel')
         parser.add_argument('-o', help='Path to output model, defaults to Sub_CRUST1.0_nr_nt_np.h5', default=None, metavar='fname')
         parser.add_argument('-s', help='Smooth the 3D model with a Gaussian filter,' 
                             'Sigma is the standard division of the smoothing kernel, defaults to None',
                             default=None, type=float, metavar='sigma')
-        parser.add_argument('-t', help='Type of velocity vp or vs are available', default='vp', metavar='vel_type')
+        parser.add_argument('-t', help='Type of velocity vp or vs are available, valid for -m1', default='vp', metavar='vel_type')
         args = parser.parse_args(sys.argv[2:])
-        para = ATTPara(args.input_params)
-        cm = CrustModel()
-        cm.griddata(
-            para.input_params['domain']['min_max_dep'],
-            para.input_params['domain']['min_max_lat'],
-            para.input_params['domain']['min_max_lon'],
-            para.input_params['domain']['n_rtp'],
-            args.t
-        )
+        mod = Model(args.input_params)
+        if args.m == 1:
+            mod.grid_data_crust1(args.t)
+        elif args.m == 2:
+            try:
+                usecols = [int(c) for c in args.c.split('/')]
+            except:
+                raise ValueError('Columns should be in format of ncol_lon/ncol_lat/ncol_dep/ncol_vel')
+            if not exists(args.i):
+                raise FileNotFoundError('No such model file of {}'.format(args.i))
+            mod.grid_data_ascii(args.i, usecols=usecols)
+        else:
+            raise ValueError('Invalid model type of {}'.format(args.m))
         if args.s is not None:
-            cm.smooth(args.s)
-        cm.write(args.o)
+            mod.smooth(args.s)
+        mod.write(args.o)
 
     def create_checkerboard(self):
         parser = argparse.ArgumentParser(description='Add perturbations on a model')
