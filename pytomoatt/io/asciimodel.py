@@ -52,15 +52,7 @@ class ASCIIModel():
         )
 
         # Set NaN to nearest value
-        # for i, _ in enumerate(self.tt):
-        #     for j, _ in enumerate(self.pp):
-        #         vp_dep = grid_vp[:, i, j]
-        #         first_non_nan_index = np.where(~np.isnan(vp_dep))[0][0]
-        #         last_non_nan_index = np.where(~np.isnan(vp_dep))[0][-1]
-        #         vp_dep[:first_non_nan_index] = vp_dep[first_non_nan_index]
-        #         vp_dep[last_non_nan_index+1:] = vp_dep[last_non_nan_index]
-        #         grid_vp[:, i, j] = vp_dep
-        grid_vp = ignore_nan_3d(grid_vp)
+        vel = ignore_nan_3d(grid_vp)
 
-        return grid_vp
+        return vel
         

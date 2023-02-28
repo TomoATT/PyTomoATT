@@ -1,7 +1,7 @@
 import numpy as np
 from os.path import dirname, abspath, join
 from scipy.interpolate import griddata
-from ..utils import init_axis
+from ..utils import init_axis, ignore_nan_3d
 import h5py
 
 
@@ -64,17 +64,7 @@ class CrustModel():
         )
 
         # Set NaN to nearest value
-        for i, _ in enumerate(self.tt):
-            for j, _ in enumerate(self.pp):
-                vp_dep = grid_vp[:, i, j]
-                first_non_nan_index = np.where(~np.isnan(vp_dep))[0][0]
-                last_non_nan_index = np.where(~np.isnan(vp_dep))[0][-1]
-                vp_dep[:first_non_nan_index] = vp_dep[first_non_nan_index]
-                vp_dep[last_non_nan_index+1:] = vp_dep[last_non_nan_index]
-                grid_vp[:, i, j] = vp_dep
-
-        # output
-        vel = grid_vp
+        vel = ignore_nan_3d(grid_vp)
 
         return vel
 

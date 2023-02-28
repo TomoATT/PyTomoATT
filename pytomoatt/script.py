@@ -70,7 +70,9 @@ The pta commands include:
 
     def create_model(self):
         parser = argparse.ArgumentParser(description='Create model for TomoATT from external models: CRUST1.0 or custom model\n'
-                                         'ex2 (custom model): pta create_model -m2 -i USTClitho2.0.txt -o t.h5 -s3 input_params.yml')
+                                         'Ex1 (CRUST1.0): pta create_model -oatt_model.h5 -s5 -tvs input_params.yml\n'
+                                         'Ex2 (custom model): pta create_model -m2 -iUSTClitho2.0.txt -oatt_model.h5 -s3 input_params.yml',
+                                         formatter_class=argparse.RawTextHelpFormatter)
         parser.add_argument('input_params', help='The parameter file of TomoATT, The section \"domain\" will be read.')
         parser.add_argument('-m', help='Background model type. 1 for CRUST1.0, 2 for custom ASCII file, defaults to 1',
                             default=1, type=int, metavar='1|2')

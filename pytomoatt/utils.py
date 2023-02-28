@@ -124,7 +124,7 @@ def to_vtk(fname:str, model:dict, dep, lat, lon):
         import pyvista as pv
     except:
         raise ModuleNotFoundError('Please install pyvista first')
-    dd, tt, pp = np.meshgrid(np.flip(dep), lat, lon, indexing='ij')
+    dd, tt, pp = np.meshgrid(dep, lat, lon, indexing='ij')
     x, y, z = WGS84_to_cartesian(dd, tt, pp)
     grid = pv.StructuredGrid(x, y, z)
     for key, value in model.items():
