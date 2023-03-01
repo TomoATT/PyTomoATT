@@ -36,7 +36,7 @@ jobs:
           use-mamba: true
 
       - name: Install PyTomoATT
-        runs: |
+        run: |
           pip install .
           
       - name: Switch to docs
@@ -45,7 +45,7 @@ jobs:
           ref: docs
 
       - name: Install dependencies
-        runs: |
+        run: |
           conda env update --file environment.yml
       
       - name: Deploy documentation
