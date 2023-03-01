@@ -35,7 +35,7 @@ pip install pytomoatt
 ## Installing development version from source
 
 - Clone the repository
-- 
+
 Users can install PyTomoATT from the source code available on GitHub. First, clone the PyTomoATT repository:
 ```
 git clone --branch=devel https://github.com/MIGG-NTU/PyTomoATT.git

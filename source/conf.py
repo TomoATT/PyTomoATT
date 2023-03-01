@@ -6,6 +6,8 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
+import os
+
 project = 'PyTomoATT'
 copyright = '2023, Mijian Xu'
 author = 'Mijian Xu'
@@ -81,13 +83,16 @@ html_extra_path = []
 html_title = project
 html_css_files = ["custom.css"]
 
-github_user = "MIGG-NTU"
-github_repo = "PyTomoATT"
-html_context = {
-    "favicon": "logo.png",
-    "display_github": True,
-    "github_user": github_user,
-    "github_repo": github_repo,
-    "github_version": "docs",
-    "conf_py_path": "/source/",
-}
+html_favicon = os.path.abspath(os.path.join('.', '_static', 'logo.png'))
+# html_logo = os.path.abspath(os.path.join('.', '_static', 'seispy-long.png'))
+
+# github_user = "MIGG-NTU"
+# github_repo = "PyTomoATT"
+# html_context = {
+#     "favicon": "logo.png",
+#     "display_github": True,
+#     "github_user": github_user,
+#     "github_repo": github_repo,
+#     "github_version": "docs",
+#     "conf_py_path": "/source/",
+# }
