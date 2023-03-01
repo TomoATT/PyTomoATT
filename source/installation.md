@@ -2,13 +2,13 @@
 
 ## Conda environment
 
-### Create a new Conda environment
-
 We recommend installing PyTomoATT in a conda environment to ensure compatibility with the required dependencies.
 
 ```{note}
 If you don't already have Conda installed, you can download and install it from the official Conda website: [https://docs.conda.io/en/latest/miniconda.html](https://docs.conda.io/en/latest/miniconda.html)
 ```
+
+### Create a new Conda environment
 
 Create a new Conda environment for Pytomoatt with the following command:
 ```
