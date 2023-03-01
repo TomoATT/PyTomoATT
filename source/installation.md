@@ -1,5 +1,7 @@
 # Installation
 
+## Conda environment
+
 ### Create a new Conda environment
 
 We recommend installing PyTomoATT in a conda environment to ensure compatibility with the required dependencies.
@@ -24,8 +26,23 @@ Activate the newly created environment with the following command:
 conda activate pytomoatt
 ```
 
-### Download source code
-Users can install Pytomoatt from the source code available on GitHub. First, clone the Pytomoatt repository:
+## Installing stable version via PyPI
+
 ```
-git clone https://github.com/MIGG-NTU/PyTomoATT.git
+pip install pytomoatt
+```
+
+## Installing development version from source
+
+- Clone the repository
+- 
+Users can install PyTomoATT from the source code available on GitHub. First, clone the PyTomoATT repository:
+```
+git clone --branch=devel https://github.com/MIGG-NTU/PyTomoATT.git
+```
+
+- Install using `pip`
+
+```
+pip install .
 ```
