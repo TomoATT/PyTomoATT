@@ -1,0 +1,16 @@
+name: docs-post
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.9
+  - pip
+  - sphinx
+  - sphinx-copybutton
+  - sphinx-design
+  - myst-nb
+  - pip:
+    - sphinx-gallery
+    - sphinxcontrib-bibtex
+    - sphinx-icon
+    - furo
