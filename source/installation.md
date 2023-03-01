@@ -10,7 +10,7 @@ If you don't already have Conda installed, you can download and install it from 
 
 Create a new Conda environment for Pytomoatt with the following command:
 ```
-conda create -n pytomoatt python=3.10
+conda create -n pytomoatt python=3.11
 ```
 
 This creates a new environment named "pytomoatt" with Python version 3.10 installed.
