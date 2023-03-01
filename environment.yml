@@ -1,4 +1,4 @@
-name: docs-post
+name: docs
 channels:
   - conda-forge
   - nodefaults
