@@ -4,6 +4,8 @@ from .utils import init_axis, sind, cosd
 
 
 class Checker():
+    """Create checkerboard model by adding perturbations on an exist model
+    """
     def __init__(self, fname:str) -> None:
         self.model_file = fname
         with h5py.File(fname) as f:
@@ -106,7 +108,12 @@ class Checker():
         self.xi = self.epsilon*cosd(2*self.phi)
         self.eta = self.epsilon*sind(2*self.phi)
 
-    def write(self, fname):
+    def write(self, fname: str):
+        """Write new model to h5 file
+
+        :param fname: Path to output file
+        :type fname: str
+        """
         if fname is None:
             fname = '.'.join(self.model_file.split('.')[:-1])+'_pert.h5'
         with h5py.File(fname, 'w') as f:

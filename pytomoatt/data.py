@@ -26,8 +26,8 @@ class ATTData():
         exec('self.{} = None'.format(name))
         self.fields.append(name)
 
-    def read_h5(self):
-        """read h5 data file
+    def _read_h5(self):
+        """read data file with HDF5 format
         """
         self.fgrid = h5py.File(self.fname_grid, 'r')
         self.fdata = h5py.File(self.fname, 'r')
@@ -41,7 +41,7 @@ class ATTData():
         attdata.format = format
         # open grid data file
         if attdata.format == 'hdf5':
-            attdata.read_h5()
+            attdata._read_h5()
         else:
             attdata.fdata = np.loadtxt(fname)
             attdata.fgrid = np.loadtxt(fname_grid)
@@ -157,6 +157,11 @@ class ATTData():
         return data_glob, grid_glob_r, grid_glob_t, grid_glob_p
 
     def to_xarray(self):
+        """Convert to attarray.Dataset
+
+        :return: A multi-dimensional data base inheriting from xarray.Dataset
+        :rtype: attarray.DataSet
+        """
         depths = 6371. - self.grid_glob_r[:, 0, 0]
         radius = self.grid_glob_r[:, 0, 0]
         latitudes = self.grid_glob_t[0, :, 0]

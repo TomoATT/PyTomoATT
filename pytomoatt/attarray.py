@@ -4,9 +4,10 @@ from scipy.interpolate import interpn
 from pyproj import Geod
 
 class Dataset(xarray.Dataset):
+    """Sub class of `xarray.Dataset <https://docs.xarray.dev/en/stable/generated/xarray.Dataset.html>`__
+    """
     def __init__(self, data_vars, coords, attrs=None) -> None:
-        """Sub class of xarray.Dataset
-        """
+
         __slots__ = ()
         super().__init__(data_vars, coords, attrs)
 

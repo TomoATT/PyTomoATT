@@ -4,10 +4,10 @@ import pandas as pd
 pd.options.mode.chained_assignment = None  # default='warn'
 
 class SrcRec():
-
-    def __init__(self, fname='', src_only=False) -> None:
-        """I/O for source <--> receiver file
-
+    """I/O for source <--> receiver file
+    """
+    def __init__(self, fname: str, src_only=False) -> None:
+        """
         :param fname: Path to src_rec file
         :type fname: str
         :param src_only: Whether to read only source information, defaults to False
@@ -179,6 +179,8 @@ In this case, please set dist_in_data=True and read again.""")
                     ))
 
     def reset_index(self):
+        """Reset index of source and receivers.
+        """
         # reset src_index to be 0, 1, 2, ... for both src_points and rec_points
         self.rec_points['src_index'] = self.rec_points['src_index'].map(
             dict(zip(self.src_points.index, np.arange(len(self.src_points)))))
@@ -245,12 +247,13 @@ In this case, please set dist_in_data=True and read again.""")
         """
         check and count how many events are duplicated,
         under given threshold of distance, depth, and time.
-        thre_deg : float
-            threshold of distance in degree
-        thre_dep : float
-            threshold of depth in km
-        thre_time_in_min : float
-            threshold of time in minutes
+
+        :param thre_deg: threshold of distance in degree
+        :type thre_deg: float
+        :param thre_dep: threshold of distance in degree
+        :type thre_dep: float
+        :param thre_time_in_min: hreshold of time in minutes
+        :type thre_time_in_min: float
         """
 
         # sort event data
@@ -303,7 +306,9 @@ In this case, please set dist_in_data=True and read again.""")
     def select_phase(self, phase_list):
         """
         select interested phase and remove others
-        phase_list : list of str
+
+        :param phase_list: List of phases for travel times used for inversion
+        :type phase_list: list of str
         """
         if not isinstance(phase_list, (list, str)):
             raise TypeError('phase_list should be in list or str')
@@ -321,7 +326,8 @@ In this case, please set dist_in_data=True and read again.""")
     def select_box_region(self, region):
         """
         Select sources and station in a box region
-        param region: Box region defined as [lon1, lon2, lat1, lat2]
+
+        :param region: Box region defined as [lon1, lon2, lat1, lat2]
         :type region: iterable
         """
         # select source within this region.
@@ -348,13 +354,14 @@ In this case, please set dist_in_data=True and read again.""")
         self.update_num_rec()
 
     def select_one_event_in_each_subgrid(self, d_deg:float, d_km:float):
+        """ select one event in each subgrid
+        
+        :param d_deg: grid size in degree
+        :type d_deg: float
+        :param d_km: grid size in km
+        :type d_km: float
         """
-        select one event in each subgrid
-        d_deg : float
-            grid size in degree
-        d_km : float
-            grid size in km
-        """
+   
         print('src_points before selecting: ', self.src_points.shape)
         print('processing... (this may take a few minutes)')
 
@@ -531,10 +538,10 @@ In this case, please set dist_in_data=True and read again.""")
     def plot(self, weight=False, fname=None):
         """Plot source and receivers for preview
 
-        :param weight: _description_, defaults to False
+        :param weight: Draw colors of weights, defaults to False
         :type weight: bool, optional
-        :param fname: _description_, defaults to None
-        :type fname: _type_, optional
+        :param fname: Path to output file, defaults to None
+        :type fname: str, optional
         :return: _description_
         :rtype: _type_
         """
