@@ -80,3 +80,14 @@ jupyter_execute_notebooks = "cache"
 html_extra_path = []
 html_title = project
 html_css_files = ["custom.css"]
+
+github_user = "MIGG-NTU"
+github_repo = "PyTomoATT"
+html_context = {
+    "favicon": "logo.png",
+    "display_github": True,
+    "github_user": github_user,
+    "github_repo": github_repo,
+    "github_version": "docs",
+    "conf_py_path": "/source/",
+}
