@@ -31,18 +31,22 @@ jobs:
         uses: conda-incubator/setup-miniconda@v2.1.1
         with:
           activate-environment: docs
-          environment-file: environment.yml
+          # environment-file: environment.yml
           miniforge-variant: Mambaforge
           use-mamba: true
 
       - name: Install PyTomoATT
-        run: |
+        runs: |
           pip install .
           
       - name: Switch to docs
         uses: actions/checkout@v2.4.0
         with:
           ref: docs
+
+      - name: Install dependencies
+        runs: |
+          conda env update --file environment.yml
       
       - name: Deploy documentation
         uses: peaceiris/actions-gh-pages@068dc23d9710f1ba62e86896f84735d869951305
