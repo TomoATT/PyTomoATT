@@ -4,7 +4,7 @@
 
 
 [![Python Package using Conda](https://github.com/MIGG-NTU/PyTomoATT/actions/workflows/build-test-conda.yml/badge.svg?branch=devel)](https://github.com/MIGG-NTU/PyTomoATT/actions/workflows/build-test-conda.yml)
-[![Documentations](https://github.com/MIGG-NTU/PyTomoATT/actions/workflows/build-docs.yml/badge.svg)](https://migg-ntu.github.io/PyTomoATT/)
+[![Build documentations](https://github.com/MIGG-NTU/PyTomoATT/actions/workflows/build-docs.yml/badge.svg?branch=docs)](https://migg-ntu.github.io/PyTomoATT/)
 
 ![PyPI - License](https://img.shields.io/pypi/l/pytomoatt)
 ![PyPI](https://img.shields.io/pypi/v/pytomoatt)
