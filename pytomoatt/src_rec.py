@@ -1,6 +1,7 @@
 import numpy as np
 import tqdm
 import pandas as pd
+from .setuplog import SetupLog
 pd.options.mode.chained_assignment = None  # default='warn'
 
 class SrcRec():
@@ -18,6 +19,7 @@ class SrcRec():
         self.src_points = None
         self.rec_points = None
         self.fnames = [fname]
+        self.log = SetupLog()
 
     def __repr__(self):
         return f"PyTomoATT SrcRec Object: \n\
@@ -90,7 +92,7 @@ class SrcRec():
         try:
             src_data = src_data.astype(type_dict)
         except:
-            print("Error2: please check the event data format in the src_rec file")
+            sr.log.SrcReclog.error("please check the event data format in the src_rec file")
             return sr.src_points
 
         # concat all the 3 dataframes
@@ -117,8 +119,8 @@ class SrcRec():
 
             # warning if weigh value is greater than 10
             if (sr.rec_points.loc[:, last_col+1] > 10).any():
-                print("""
-Warning: at least one weight value is greater than 10.
+                sr.log.SrcReclog.warning("""
+at least one weight value is greater than 10.
 Probably your src_rec file includes distance data.
 In this case, please set dist_in_data=True and read again.""")
 
@@ -233,9 +235,9 @@ In this case, please set dist_in_data=True and read again.""")
         """
         remove rec_points by new src_points
         """
-        print('rec_points before removing: ', self.rec_points.shape)
+        self.log.SrcReclog.info('rec_points before removing: {}'.format(self.rec_points.shape))
         self.rec_points = self.rec_points[self.rec_points['src_index'].isin(self.src_points.index)]
-        print('rec_points after removing: ', self.rec_points.shape)
+        self.log.SrcReclog.info('rec_points after removing: {}'.format(self.rec_points.shape))
 
     def update_num_rec(self):
         """
@@ -287,7 +289,7 @@ In this case, please set dist_in_data=True and read again.""")
 
             # print iterate count and number of rows, number of duplicated rows
             num_duplicated = self.src_points[(self.src_points["duplicated+1"]==1) | (self.src_points["duplicated-1"]==1)].shape[0]
-            print("iteration: ", iter_count, "num_duplicated: ", num_duplicated)
+            self.log.SrcReclog.info("iteration: {}; num_duplicated: {}".format(iter_count, num_duplicated))
 
             iter_count += 1
 
@@ -312,9 +314,9 @@ In this case, please set dist_in_data=True and read again.""")
         """
         if not isinstance(phase_list, (list, str)):
             raise TypeError('phase_list should be in list or str')
-        print('rec_points before selecting: ', self.rec_points.shape)
+        self.log.SrcReclog.info('rec_points before selecting: {}'.format(self.rec_points.shape))
         self.rec_points = self.rec_points[self.rec_points['phase'].isin(phase_list)]
-        print('rec_points after selecting: ', self.rec_points.shape)
+        self.log.SrcReclog.info('rec_points after selecting: {}'.format(self.rec_points.shape))
 
         # modify num_rec in src_points
         self.src_points['num_rec'] = self.rec_points.groupby('src_index').size()
@@ -362,8 +364,8 @@ In this case, please set dist_in_data=True and read again.""")
         :type d_km: float
         """
    
-        print('src_points before selecting: ', self.src_points.shape)
-        print('processing... (this may take a few minutes)')
+        self.log.SrcReclog.info('src_points before selecting: {}'.format(self.src_points.shape))
+        self.log.SrcReclog.info('processing... (this may take a few minutes)')
 
         # store index of src_points as 'src_index'
         self.src_points['src_index'] = self.src_points.index
@@ -391,7 +393,7 @@ In this case, please set dist_in_data=True and read again.""")
         # sort src_points by index
         self.src_points = self.src_points.sort_index()
 
-        print('src_points after selecting: ', self.src_points.shape)
+        self.log.SrcReclog.info('src_points after selecting: {}'.format(self.src_points.shape))
 
         # remove rec_points by new src_points
         self.remove_rec_by_new_src()

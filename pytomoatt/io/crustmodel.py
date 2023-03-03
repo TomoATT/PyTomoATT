@@ -2,6 +2,7 @@ import numpy as np
 from os.path import dirname, abspath, join
 from scipy.interpolate import griddata
 from ..utils import init_axis, ignore_nan_3d
+from ..setuplog import SetupLog
 import h5py
 
 
@@ -28,6 +29,7 @@ class CrustModel():
         """
         with h5py.File(fname) as f:
             self.points = f['model'][:]
+        self.log = SetupLog()
 
     def griddata(self, min_max_dep, min_max_lat, min_max_lon, n_rtp, type='vp'):
         """Linearly interpolate velocity into regular grids
@@ -55,7 +57,7 @@ class CrustModel():
 
         # Grid data 
         new_dep, new_lat, new_lon = np.meshgrid(self.dd, self.tt, self.pp, indexing='ij')
-        print('Grid data, please wait for a few minutes')
+        self.log.Modellog.info('Grid data, please wait for a few minutes')
         grid_vp = griddata(
             self.points[:, 0:3],
             self.points[:, col], 
@@ -65,7 +67,8 @@ class CrustModel():
 
         # Set NaN to nearest value
         vel = ignore_nan_3d(grid_vp)
-
+        self.log.Modellog.info('Done.')
+        
         return vel
 
 
