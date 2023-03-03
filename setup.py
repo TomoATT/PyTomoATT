@@ -6,7 +6,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 
-VERSION = "0.1.1"
+VERSION = "0.1.5"
 setup(name='PyTomoATT',
       version=VERSION,
       author='Mijian Xu, Masaru Nagaso',
@@ -15,15 +15,19 @@ setup(name='PyTomoATT',
       author_email='mijian.xu@ntu.edu.sg',
       license='GPLv3',
       package_dir={'pytomoatt': 'pytomoatt'},
-      package_data={'': ['template/*']},
+      package_data={'': ['template/*', 'data/*']},
       packages=find_packages(),
       install_requires=[
                 'numpy>=1.19.0',
-                'scipy>=1.9.1',
                 'pandas>=1.4.0',
+                'scipy',
                 'h5py',
                 'pyyaml',
-                'xarray'],
+                'xarray',
+                'argcomplete',
+                'tqdm',
+                'obspy',
+                'pyproj'],
       entry_points={'console_scripts':['pta=pytomoatt.script:main']},
       zip_safe=False,
       classifiers=['Programming Language :: Python',

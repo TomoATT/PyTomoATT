@@ -1,7 +1,8 @@
 import numpy as np
 import h5py
 from .para import ATTPara
-import xarray
+from .attarray import Dataset
+from .utils import asind, acosd
 
 
 class ATTData():
@@ -20,11 +21,16 @@ class ATTData():
         self.input_params = ATTPara(fname_params).input_params
         self.ndiv_r, self.ndiv_t, self.ndiv_p = self.input_params['parallel']['ndiv_rtp']
         self.nr_glob, self.nt_glob, self.np_glob = self.input_params['domain']['n_rtp']
-        # self.dataset_name = dataset_name
 
     def _add_field(self, name):
         exec('self.{} = None'.format(name))
         self.fields.append(name)
+
+    def _read_h5(self):
+        """read data file with HDF5 format
+        """
+        self.fgrid = h5py.File(self.fname_grid, 'r')
+        self.fdata = h5py.File(self.fname, 'r')
 
     @classmethod
     def read(cls, fname:str, fname_params:str,
@@ -35,40 +41,40 @@ class ATTData():
         attdata.format = format
         # open grid data file
         if attdata.format == 'hdf5':
-            attdata.fgrid = h5py.File(fname_grid, 'r')
-            attdata.fdata = h5py.File(fname, 'r')
+            attdata._read_h5()
         else:
             attdata.fdata = np.loadtxt(fname)
             attdata.fgrid = np.loadtxt(fname_grid)
         if isinstance(dataset_name, str) and attdata.format == 'hdf5':
             attdata._add_field(dataset_name)
-            exec('attdata.data_{}, attdata.grid_glob_r,'
-                'attdata.grid_glob_t, attdata.grid_glob_p = '
-                'attdata._data_retrieval({})'.format(key))
+            attdata.__dict__[key], attdata.grid_glob_r, \
+            attdata.grid_glob_t, attdata.grid_glob_p = \
+            attdata._data_retrieval(dataset_name=key)
         elif isinstance(dataset_name, str) and attdata.format != 'hdf5':
             attdata._add_field('data')
             attdata.data, attdata.grid_glob_r, attdata.grid_glob_t, attdata.grid_glob_p = \
                 attdata._data_retrieval()
         elif isinstance(dataset_name, (list, tuple)) and attdata.format == 'hdf5':
             for key in dataset_name:
-                if not (key in attdata.fgrid.keys()):
+                if not (key in attdata.fdata['model'].keys()):
                     raise ValueError('Error dataset_name of {}. \n{} are available.'.format(key, ', '.join(attdata.fgrid.keys())))
                 attdata._add_field(key)
-                exec('attdata.data_{}, attdata.grid_glob_r,'
-                    'attdata.grid_glob_t, attdata.grid_glob_p = '
-                    'attdata._data_retrieval({})'.format(key))
-        elif dataset_name is None and cls.format == 'hdf5':
-            for key in attdata.fgrid.keys():
+                print(attdata.vel)
+                attdata.__dict__[key], attdata.grid_glob_r, \
+                attdata.grid_glob_t, attdata.grid_glob_p = \
+                attdata._data_retrieval(dataset_name=key)
+        elif dataset_name is None and attdata.format == 'hdf5':
+            for key in attdata.fdata['model'].keys():
                 attdata._add_field(key)
-                exec('attdata.data_{}, attdata.grid_glob_r,'
-                    'attdata.grid_glob_t, attdata.grid_glob_p = '
-                    'attdata._data_retrieval({})'.format(key))
+                attdata.__dict__[key], attdata.grid_glob_r, \
+                attdata.grid_glob_t, attdata.grid_glob_p = \
+                attdata._data_retrieval(dataset_name=key)
         else:
             raise ValueError('Error format of dataset_name')
         return attdata
 
     def _read_data_hdf5(self, offset, n_points_total_sub, dataset_name):
-        data_sub = self.fdata['Data'][dataset_name][offset:offset+n_points_total_sub]
+        data_sub = self.fdata['model'][dataset_name][offset:offset+n_points_total_sub]
         grid_sub_p = self.fgrid["/Mesh/node_coords_p"][offset:offset+n_points_total_sub]
         grid_sub_t = self.fgrid["/Mesh/node_coords_t"][offset:offset+n_points_total_sub]
         grid_sub_r = self.fgrid["/Mesh/node_coords_r"][offset:offset+n_points_total_sub]
@@ -151,14 +157,19 @@ class ATTData():
         return data_glob, grid_glob_r, grid_glob_t, grid_glob_p
 
     def to_xarray(self):
-        depths = 6371. - self.grid_glob_r[0, :, 0]
+        """Convert to attarray.Dataset
+
+        :return: A multi-dimensional data base inheriting from xarray.Dataset
+        :rtype: attarray.DataSet
+        """
+        depths = 6371. - self.grid_glob_r[:, 0, 0]
         radius = self.grid_glob_r[:, 0, 0]
         latitudes = self.grid_glob_t[0, :, 0]
         longitudes = self.grid_glob_p[0, 0, :]
         data_dict = {}
         for dataset_name in self.fields:
-            exec('data_dict[{0}] = (["r", "t", "p"], self.{0})'.format(dataset_name))
-        dataset = xarray.Dataset(
+            data_dict[dataset_name] = (["r", "t", "p"], self.__dict__[dataset_name])
+        dataset = Dataset(
             data_dict,
             coords={
                 'dep': (['r'], depths),
