@@ -4,7 +4,7 @@
 
 
 [![Python Package using Conda](https://github.com/MIGG-NTU/PyTomoATT/actions/workflows/build-test-conda.yml/badge.svg?branch=devel)](https://github.com/MIGG-NTU/PyTomoATT/actions/workflows/build-test-conda.yml)
-[![Documentations](https://github.com/MIGG-NTU/PyTomoATT/actions/workflows/build-docs.yml/badge.svg)](https://migg-ntu.github.io/PyTomoATT/)
+[![Build documentations](https://github.com/MIGG-NTU/PyTomoATT/actions/workflows/build-docs.yml/badge.svg?branch=docs)](https://migg-ntu.github.io/PyTomoATT/)
 
 ![PyPI - License](https://img.shields.io/pypi/l/pytomoatt)
 ![PyPI](https://img.shields.io/pypi/v/pytomoatt)
@@ -19,8 +19,8 @@ PyTomoATT is a Python module that provides an interface for TomoATT, a software 
 
 ### Inclusion
 
-- Processing for input travel time data file.
-- Create initial model from CRUST1.0 and custom model.
+- Processing for the input travel time data.
+- Create initial model from CRUST1.0 and custom models.
 - Add checkerboard on an exists model.
 - API for output data of TomoATT (kernel, travel time field ...).
 - Post-processing for final model.
@@ -39,4 +39,4 @@ See section [Installation](https://migg-ntu.github.io/PyTomoATT/installation.htm
 
 ## Documentation
 
-The complete API documentation, and tutorials can be accessed at [PyTomoATT Documentation](https://migg-ntu.github.io/PyTomoATT/index.html) 
+The complete API documentation, and tutorials can be accessed at [PyTomoATT Documentation](https://migg-ntu.github.io/PyTomoATT/index.html).
