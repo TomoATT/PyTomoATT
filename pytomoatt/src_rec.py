@@ -71,7 +71,7 @@ class SrcRec():
         try:
             datedf = datedf.astype(type_dict)
         except:
-            print("Error: please check the date format in the src_rec file")
+            sr.log.SrcReclog.error("please check the date format in the src_rec file")
             return sr.src_points
         dateseris = datedf.astype(str).apply(lambda x: '.'.join(x), axis=1).apply(
             pd.to_datetime, format='%Y.%m.%d.%H.%M.%S.%f')
@@ -232,13 +232,15 @@ In this case, please set dist_in_data=True and read again.""")
         # store fnames
         self.fnames.extend(sr.fnames)
 
-    def remove_rec_by_new_src(self):
+    def remove_rec_by_new_src(self, verbose=True):
         """
         remove rec_points by new src_points
         """
-        self.log.SrcReclog.info('rec_points before removing: {}'.format(self.rec_points.shape))
+        if verbose:
+            self.log.SrcReclog.info('rec_points before removing: {}'.format(self.rec_points.shape))
         self.rec_points = self.rec_points[self.rec_points['src_index'].isin(self.src_points.index)]
-        self.log.SrcReclog.info('rec_points after removing: {}'.format(self.rec_points.shape))
+        if verbose:
+            self.log.SrcReclog.info('rec_points after removing: {}'.format(self.rec_points.shape))
     
     def remove_src_by_new_rec(self):
         self.src_points = self.src_points[self.src_points.index.isin(self.rec_points['src_index'])]
@@ -337,6 +339,8 @@ In this case, please set dist_in_data=True and read again.""")
         :type region: iterable
         """
         # select source within this region.
+        self.log.SrcReclog.info('src_points before selecting: {}'.format(self.src_points.shape))
+        self.log.SrcReclog.info('rec_points before selecting: {}'.format(self.rec_points.shape))
         self.src_points = self.src_points[
             (self.src_points['evlo'] >= region[0]) &
             (self.src_points['evlo'] <= region[1]) &
@@ -345,7 +349,7 @@ In this case, please set dist_in_data=True and read again.""")
         ]
 
         # Remove receivers whose events have been removed
-        self.remove_rec_by_new_src()
+        self.remove_rec_by_new_src(verbose=False)
 
         # Remove rest receivers out of region.
         self.rec_points = self.rec_points[
@@ -358,6 +362,8 @@ In this case, please set dist_in_data=True and read again.""")
         # Remove empty sources
         self.src_points = self.src_points[self.src_points.index.isin(self.rec_points['src_index'])]
         self.update_num_rec()
+        self.log.SrcReclog.info('src_points after selecting: {}'.format(self.src_points.shape))
+        self.log.SrcReclog.info('rec_points after selecting: {}'.format(self.rec_points.shape))
 
     def select_distance(self, dist_min_max):
         """Select stations in a range of distance 
@@ -365,7 +371,7 @@ In this case, please set dist_in_data=True and read again.""")
         :param dist_min_max: limit of distance, ``[dist_min, dist_max]``
         :type dist_min_max: list or tuple
         """
-        print('rec_points before selecting: ', self.rec_points.shape)
+        self.log.SrcReclog.info('rec_points before selecting: {}'.format(self.rec_points.shape))
         rec_group = self.rec_points.groupby('src_index')
         for idx, rec in rec_group:
             dist = DistAZ(
@@ -378,7 +384,7 @@ In this case, please set dist_in_data=True and read again.""")
             self.rec_points = self.rec_points.drop(index=drop_idx)
         self.remove_src_by_new_rec()
         self.update_num_rec()
-        print('rec_points after selecting: ', self.rec_points.shape)
+        self.log.SrcReclog.info('rec_points after selecting: {}'.format(self.rec_points.shape))
 
     def select_one_event_in_each_subgrid(self, d_deg:float, d_km:float):
         """ select one event in each subgrid
