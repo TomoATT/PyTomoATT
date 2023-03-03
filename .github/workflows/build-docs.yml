@@ -8,7 +8,14 @@ on:
     branches: [ "docs" ]
   pull_request:
     branches: [ "main" ]
-
+  workflow_call:
+    inputs:
+      config-path:
+        required: true
+        type: string
+    secrets:
+      token:
+        required: true
 
 jobs:
   deploy:
