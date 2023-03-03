@@ -6,7 +6,7 @@ import argcomplete
 import sys
 import h5py
 from .src_rec import SrcRec
-from .model import Model
+from .model import ATTModel
 from .para import ATTPara
 from .utils import to_vtk, init_axis
 from .checkerboard import Checker
@@ -85,7 +85,7 @@ The pta commands include:
                             default=None, type=float, metavar='sigma')
         parser.add_argument('-t', help='Type of velocity vp or vs are available, valid for -m1', default='vp', metavar='vel_type')
         args = parser.parse_args(sys.argv[2:])
-        mod = Model(args.input_params)
+        mod = ATTModel(args.input_params)
         if args.m == 1:
             mod.grid_data_crust1(args.t)
         elif args.m == 2:

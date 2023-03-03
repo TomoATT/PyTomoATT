@@ -1,6 +1,7 @@
 import numpy as np
 import tqdm
 import pandas as pd
+from .distaz import DistAZ
 from .setuplog import SetupLog
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -238,6 +239,9 @@ In this case, please set dist_in_data=True and read again.""")
         self.log.SrcReclog.info('rec_points before removing: {}'.format(self.rec_points.shape))
         self.rec_points = self.rec_points[self.rec_points['src_index'].isin(self.src_points.index)]
         self.log.SrcReclog.info('rec_points after removing: {}'.format(self.rec_points.shape))
+    
+    def remove_src_by_new_rec(self):
+        self.src_points = self.src_points[self.src_points.index.isin(self.rec_points['src_index'])]
 
     def update_num_rec(self):
         """
@@ -354,6 +358,27 @@ In this case, please set dist_in_data=True and read again.""")
         # Remove empty sources
         self.src_points = self.src_points[self.src_points.index.isin(self.rec_points['src_index'])]
         self.update_num_rec()
+
+    def select_distance(self, dist_min_max):
+        """Select stations in a range of distance 
+
+        :param dist_min_max: limit of distance, ``[dist_min, dist_max]``
+        :type dist_min_max: list or tuple
+        """
+        print('rec_points before selecting: ', self.rec_points.shape)
+        rec_group = self.rec_points.groupby('src_index')
+        for idx, rec in rec_group:
+            dist = DistAZ(
+                self.src_points.loc[idx]['evla'],
+                self.src_points.loc[idx]['evlo'],
+                rec['stla'].values, rec['stlo'].values
+            ).delta
+            mask = np.where((dist < dist_min_max[0]) | (dist > dist_min_max[1]))[0]
+            drop_idx = rec.iloc[mask].index
+            self.rec_points = self.rec_points.drop(index=drop_idx)
+        self.remove_src_by_new_rec()
+        self.update_num_rec()
+        print('rec_points after selecting: ', self.rec_points.shape)
 
     def select_one_event_in_each_subgrid(self, d_deg:float, d_km:float):
         """ select one event in each subgrid
