@@ -4,9 +4,11 @@ import h5py
 from .para import ATTPara
 from .io.crustmodel import CrustModel
 from .io.asciimodel import ASCIIModel
+from .attarray import Dataset
+from .utils import init_axis, acosd
 
 
-class Model():
+class ATTModel():
     """Create initial model from external models
     """
     def __init__(self, para_fname='input_params.yml') -> None:
@@ -29,6 +31,67 @@ class Model():
         self.min_max_dep = para.input_params['domain']['min_max_dep']
         self.min_max_lat = para.input_params['domain']['min_max_lat']
         self.min_max_lon = para.input_params['domain']['min_max_lon']
+        self.depths, self.latitudes, self.longitudes, _, _, _ = init_axis(
+            self.min_max_dep, self.min_max_lat, self.min_max_lon, self.n_rtp
+        )
+        self.radius = 6371. - self.depths
+
+    @classmethod
+    def read(cls, model_fname: str, para_fname='input_params.yml'):
+        """Read an exists model
+
+        :param model_fname: Path to the exists model
+        :type model_fname: str
+        :param para_fname: Path to parameter file, defaults to 'input_params.yml'
+        :type para_fname: str, optional
+        """
+        mod = cls(para_fname)
+        f = h5py.File(model_fname)
+        mod.vel = f['vel'][:]
+        mod.xi = f['xi'][:]
+        mod.eta = f['eta'][:]
+        # mod.zeta = f['zeta'][:]
+        mod._check_axis()
+        if not ((mod.xi==0).all() and (mod.eta==0).all()):
+            mod.to_ani()
+        f.close()
+        return mod
+    
+    def _check_axis(self):
+        if self.vel.shape != tuple(self.n_rtp):
+            raise ValueError('conflicting size of data and n_rtp in parameters')
+
+    def to_ani(self):
+        """Convert to anisotropic strength (epsilon) and azimuth (phi)
+        """
+        self.epsilon = np.sqrt(self.eta**2+self.xi**2)
+        self.phi = np.zeros_like(self.epsilon)
+        idx_non_zero = np.where(self.epsilon != 0)
+        self.phi[idx_non_zero] = 0.5*acosd(self.xi[idx_non_zero]/self.epsilon[idx_non_zero])
+
+    def to_xarray(self):
+        """Convert to xarray
+        """
+        data_dict = {}
+        data_dict['vel'] = (["r", "t", "p"], self.vel)
+        data_dict['xi'] = (["r", "t", "p"], self.xi)
+        data_dict['eta'] = (["r", "t", "p"], self.eta)
+        # data_dict['zeta'] = (["r", "t", "p"], self.zeta)
+        if hasattr(self, 'epsilon') and hasattr(self, 'phi'):
+            data_dict['epsilon'] = (["r", "t", "p"], self.epsilon)
+            data_dict['phi'] = (["r", "t", "p"], self.phi)
+        if hasattr(self, 'dlnv'):
+            data_dict['dlnv'] = (["r", "t", "p"], self.dlnv)
+        dataset = Dataset(
+            data_dict,
+            coords={
+                'dep': (['r'], self.depths),
+                'rad': (['r'], self.radius),
+                'lat': (['t'], self.latitudes),
+                'lon': (['p'], self.longitudes),
+            }
+        )
+        return dataset
 
     def grid_data_crust1(self, type='vp'):
         """Grid data from CRUST1.0 model
@@ -68,6 +131,18 @@ class Model():
         :type sigma: float, optional
         """
         self.vel = gaussian_filter(self.vel, sigma)
+
+    def calc_dv(self, ref_mod_fname: str):
+        """calculate anomalies relative to another model
+
+        :param ref_mod_fname: Path to reference model
+        :type ref_mod_fname: str
+        """
+        with h5py.File(ref_mod_fname) as f:
+            ref_vel = f['vel'][:]
+            if self.vel.shape != ref_vel.shape:
+                raise ValueError('reference model should be in same size as input model')
+            self.dlnv = 100*(self.vel - ref_vel)/ref_vel
 
     def write(self, out_fname=None):
         """Write to h5 file with TomoATT format.

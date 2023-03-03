@@ -100,11 +100,6 @@ def init_axis(min_max_dep, min_max_lat, min_max_lon, n_rtp):
     return dd, tt, pp, dr, dt, dp
 
 
-def xieta2ani(self, xi, eta):
-    epsilon = np.sqrt(eta**2+xi**2)
-    phi = 0.5*asind(eta/epsilon)
-    return epsilon, phi
-
 def to_vtk(fname:str, model:dict, dep, lat, lon):
     """convert model initial model VTK file
 

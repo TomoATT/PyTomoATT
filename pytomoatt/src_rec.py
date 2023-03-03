@@ -238,6 +238,9 @@ In this case, please set dist_in_data=True and read again.""")
         self.rec_points = self.rec_points[self.rec_points['src_index'].isin(self.src_points.index)]
         print('rec_points after removing: ', self.rec_points.shape)
 
+    def remove_src_by_new_rec(self):
+        self.src_points = self.src_points[self.src_points.index.isin(self.rec_points['src_index'])]
+
     def update_num_rec(self):
         """
         update num_rec in src_points by current rec_points
@@ -371,6 +374,7 @@ In this case, please set dist_in_data=True and read again.""")
             mask = np.where((dist < dist_min_max[0]) | (dist > dist_min_max[1]))[0]
             drop_idx = rec.iloc[mask].index
             self.rec_points = self.rec_points.drop(index=drop_idx)
+        self.remove_src_by_new_rec()
         self.update_num_rec()
         print('rec_points after selecting: ', self.rec_points.shape)
 
