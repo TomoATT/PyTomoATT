@@ -17,5 +17,7 @@ class TestSrcRec:
         assert self.sr.rec_points.shape[0] == 671 and self.sr.src_points.shape[0] == 85
 
 
-    
+if __name__ == '__main__':
+    tsr = TestSrcRec()
+    tsr.test_subcase_01()
 

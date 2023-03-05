@@ -365,13 +365,10 @@ In this case, please set dist_in_data=True and read again.""")
         self.log.SrcReclog.info('src_points after selecting: {}'.format(self.src_points.shape))
         self.log.SrcReclog.info('rec_points after selecting: {}'.format(self.rec_points.shape))
 
-    def select_distance(self, dist_min_max):
-        """Select stations in a range of distance 
-
-        :param dist_min_max: limit of distance, ``[dist_min, dist_max]``
-        :type dist_min_max: list or tuple
+    def calc_distance(self):
+        """Calculate epicentral distance
         """
-        self.log.SrcReclog.info('rec_points before selecting: {}'.format(self.rec_points.shape))
+        self.rec_points['dist'] = 0.
         rec_group = self.rec_points.groupby('src_index')
         for idx, rec in rec_group:
             dist = DistAZ(
@@ -379,9 +376,28 @@ In this case, please set dist_in_data=True and read again.""")
                 self.src_points.loc[idx]['evlo'],
                 rec['stla'].values, rec['stlo'].values
             ).delta
-            mask = np.where((dist < dist_min_max[0]) | (dist > dist_min_max[1]))[0]
-            drop_idx = rec.iloc[mask].index
-            self.rec_points = self.rec_points.drop(index=drop_idx)
+            self.rec_points['dist'].loc[rec.index] = dist
+
+    def select_distance(self, dist_min_max, recalc_dist=False):
+        """Select stations in a range of distance 
+
+        :param dist_min_max: limit of distance, ``[dist_min, dist_max]``
+        :type dist_min_max: list or tuple
+        """
+        self.log.SrcReclog.info('rec_points before selecting: {}'.format(self.rec_points.shape))
+        # rec_group = self.rec_points.groupby('src_index')
+        if ('dist' not in self.rec_points) or recalc_dist:
+            self.log.SrcReclog.info('Calculating epicentral distance...')
+            self.calc_distance()
+        elif not recalc_dist:
+            pass
+        else:
+            self.log.SrcReclog.error('No such field of dist, please set up recalc_dist to True')
+        # for _, rec in rec_group:
+        mask = (self.rec_points['dist'] < dist_min_max[0]) \
+            | (self.rec_points['dist'] > dist_min_max[1])
+        drop_idx = self.rec_points[mask].index
+        self.rec_points = self.rec_points.drop(index=drop_idx)
         self.remove_src_by_new_rec()
         self.update_num_rec()
         self.log.SrcReclog.info('rec_points after selecting: {}'.format(self.rec_points.shape))
