@@ -2,13 +2,13 @@ from pytomoatt.src_rec import SrcRec
 from subprocess import Popen
 
 
-def test_subcase01():
+def test_from_seispy():
     s = 'wget https://osf.io/hzq2x/download -O ex-ccp.tar.gz\n'
     s += 'tar -xzf ex-ccp.tar.gz\n'
     proc = Popen(s, shell=True)
     proc.communicate()
 
-    sr = SrcRec.from_seispy('ex-ccp')
+    sr = SrcRec.from_seispy('ex-ccp/RFresult')
     sr.write('src_rec_seispy')
 
 
