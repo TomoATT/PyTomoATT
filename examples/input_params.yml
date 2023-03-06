@@ -1,10 +1,10 @@
 version : 2
 
 domain :
-  min_max_dep : [-29.0, 151.0] # depth in km with R = 6371.0
+  min_max_dep : [-10.0, 151.0] # depth in km with R = 6371.0
   min_max_lat : [-1.0, 1.0]    # latitude in degree
   min_max_lon : [-2.0, 2.0]    # longitude in degree
-  n_rtp : [91,61,121]           # number of nodes
+  n_rtp : [91,61,101]           # number of nodes
 
 source :
   # src_rec_file : './src_rec_swap.dat' # source receiver file (if found, src_dep_lat_lon is ignored)

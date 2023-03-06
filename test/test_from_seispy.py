@@ -1,12 +1,18 @@
 from pytomoatt.src_rec import SrcRec
+from subprocess import Popen
 
 
-def sub_case01(path):
-    # Download test data from https://osf.io/xghrk/download
-    sr = SrcRec.from_seispy(path)
+def test_subcase01(path):
+    s = 'wget https://osf.io/hzq2x/download -O ex-ccp.tar.gz\n'
+    s += 'tar -xzf ex-ccp.tar.gz\n'
+    proc = Popen(s, shell=True)
+    proc.communicate()
+
+    sr = SrcRec.from_seispy('ex-ccp')
     sr.write('src_rec_seispy')
 
 
 if __name__ == '__main__':
-    path = '/Users/xumijian/Codes/seispy-example/ex-ccp/RFresult'
-    sub_case01(path)
+    # path = '/Users/xumijian/Codes/seispy-example/ex-ccp/RFresult'
+    # sub_case01(path)
+    pass
