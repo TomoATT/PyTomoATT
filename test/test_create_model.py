@@ -16,10 +16,10 @@ class TestATTModel():
         para = ATTPara(self.para_fname)
         cm = Checker(self.out_fname)
         cm.init_axis(
-            para['domain']['min_max_dep'],
-            para['domain']['min_max_lat'],
-            para['domain']['min_max_lon'],
-            para['domain']['n_rtp']
+            para.input_params['domain']['min_max_dep'],
+            para.input_params['domain']['min_max_lat'],
+            para.input_params['domain']['min_max_lon'],
+            para.input_params['domain']['n_rtp']
         )
         cm.checkerboard(1,1,1)
 
@@ -27,10 +27,10 @@ class TestATTModel():
         para = ATTPara(self.para_fname)
         cm = Checker(self.out_fname)
         cm.init_axis(
-            para['domain']['min_max_dep'],
-            para['domain']['min_max_lat'],
-            para['domain']['min_max_lon'],
-            para['domain']['n_rtp']
+            para.input_params['domain']['min_max_dep'],
+            para.input_params['domain']['min_max_lat'],
+            para.input_params['domain']['min_max_lon'],
+            para.input_params['domain']['n_rtp']
         )
         cm.checkerboard(
             1.5,1.5,1.5,
@@ -42,7 +42,7 @@ class TestATTModel():
     def test_read_model(self):
         mod = ATTModel.read(self.out_fname, para_fname=self.para_fname)
         dataset = mod.to_xarray()
-        dataset.interp_dep(60.3)
+        dataset.interp_dep(60.3, field='vel')
         dataset.interp_sec(
             start_point=[mod.min_max_lon[0], mod.min_max_lat[1]],
-            end_point=[mod.min_max_lon[1], mod.min_max_lat[1]])
+            end_point=[mod.min_max_lon[1], mod.min_max_lat[1]], field='vel')
