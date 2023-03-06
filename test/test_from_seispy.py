@@ -2,7 +2,7 @@ from pytomoatt.src_rec import SrcRec
 from subprocess import Popen
 
 
-def test_subcase01(path):
+def test_subcase01():
     s = 'wget https://osf.io/hzq2x/download -O ex-ccp.tar.gz\n'
     s += 'tar -xzf ex-ccp.tar.gz\n'
     proc = Popen(s, shell=True)

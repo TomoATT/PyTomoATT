@@ -1,5 +1,6 @@
 from pytomoatt.model import ATTModel
 from pytomoatt.checkerboard import Checker
+from pytomoatt.para import ATTPara
 from os.path import join, dirname, abspath
 
 class TestATTModel():
@@ -12,22 +13,24 @@ class TestATTModel():
         self.mod.write(self.out_fname)
 
     def test_checkerboard01(self):
+        para = ATTPara(self.para_fname)
         cm = Checker(self.out_fname)
         cm.init_axis(
-            self.mod.min_max_dep,
-            self.mod.min_max_lat,
-            self.mod.min_max_lon,
-            self.mod.n_rtp
+            para['domain']['min_max_dep'],
+            para['domain']['min_max_lat'],
+            para['domain']['min_max_lon'],
+            para['domain']['n_rtp']
         )
         cm.checkerboard(1,1,1)
 
     def test_checkerboard02(self):
+        para = ATTPara(self.para_fname)
         cm = Checker(self.out_fname)
         cm.init_axis(
-            self.mod.min_max_dep,
-            self.mod.min_max_lat,
-            self.mod.min_max_lon,
-            self.mod.n_rtp
+            para['domain']['min_max_dep'],
+            para['domain']['min_max_lat'],
+            para['domain']['min_max_lon'],
+            para['domain']['n_rtp']
         )
         cm.checkerboard(
             1.5,1.5,1.5,
@@ -37,7 +40,7 @@ class TestATTModel():
         )
 
     def test_read_model(self):
-        mod = ATTModel.read(self.out_fname)
+        mod = ATTModel.read(self.out_fname, para_fname=self.para_fname)
         dataset = mod.to_xarray()
         dataset.interp_dep(60.3)
         dataset.interp_sec(
