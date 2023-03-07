@@ -603,7 +603,7 @@ In this case, please set dist_in_data=True and read again.""")
         :rtype: SrcRec
         """
         from .io.seispy import Seispy
-        sr = cls()
+        sr = cls('')
         # Initial an instance of Seispy
         seispyio = Seispy(rf_path)
 
