@@ -3,6 +3,8 @@ import tqdm
 import pandas as pd
 from .distaz import DistAZ
 from .setuplog import SetupLog
+from .utils import WGS84_to_cartesian
+from scipy.spatial import distance
 pd.options.mode.chained_assignment = None  # default='warn'
 
 class SrcRec():
@@ -243,6 +245,8 @@ In this case, please set dist_in_data=True and read again.""")
             self.log.SrcReclog.info('rec_points after removing: {}'.format(self.rec_points.shape))
     
     def remove_src_by_new_rec(self):
+        """remove src_points by new receivers 
+        """
         self.src_points = self.src_points[self.src_points.index.isin(self.rec_points['src_index'])]
 
     def update_num_rec(self):
@@ -454,6 +458,36 @@ In this case, please set dist_in_data=True and read again.""")
         # reflect the total number of events for each station
         self.rec_points['num_events'] = self.rec_points.groupby('staname')['num_events'].transform('max')
 
+    def _calc_weights(self, lat, lon, scale):
+        x, y, _ = WGS84_to_cartesian(
+            0, lat, lon
+        )
+        points = pd.concat([x, y], axis=1)
+        dist = distance.cdist(points, points)
+        dist_ref = scale*np.mean(dist)
+        om = np.exp(-(dist/dist_ref)**2)*points.shape[0]
+        return 1/np.mean(om, axis=1)
+
+    def geo_weighting(self, scale=0.5, rec_weight=False):
+        """Calculating geographical weights for sources
+
+        :param scale: Scale of reference distance parameter See equation 22 in Ruan et al., (2019),
+                      The reference distance is given by ``scale``* dis_average, defaults to 0.5
+        :type scale: float, optional
+        """
+        
+        self.src_points['weight'] = self._calc_weights(
+            self.src_points['evla'],
+            self.src_points['evlo'],
+            scale
+        )
+        if rec_weight:
+            # self.rec_points['weight'] = self._calc_weights(
+            #     self.src_points['stla'],
+            #     self.src_points['stlo'],
+            #     scale
+            # )
+            pass # TODO: add weights for receivers
     #
     # This function is comment out temprarly because it includes verified bug and not modified.
     #
