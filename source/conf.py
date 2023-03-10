@@ -19,6 +19,7 @@ release = '0.1.4'
 extensions = ['sphinx.ext.githubpages',
               "sphinx.ext.intersphinx",
               'sphinx.ext.autodoc',
+              'sphinx.ext.autosummary',
               "sphinx_copybutton",
               "sphinx_design",
               "myst_nb",
