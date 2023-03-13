@@ -76,7 +76,7 @@ class ATTData():
         return attdata
 
     def _read_data_hdf5(self, offset, n_points_total_sub, dataset_name):
-        data_sub = self.fdata[attdata.group_name][dataset_name][offset:offset+n_points_total_sub]
+        data_sub = self.fdata[self.group_name][dataset_name][offset:offset+n_points_total_sub]
         grid_sub_p = self.fgrid["/Mesh/node_coords_p"][offset:offset+n_points_total_sub]
         grid_sub_t = self.fgrid["/Mesh/node_coords_t"][offset:offset+n_points_total_sub]
         grid_sub_r = self.fgrid["/Mesh/node_coords_r"][offset:offset+n_points_total_sub]
