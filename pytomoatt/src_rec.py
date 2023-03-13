@@ -5,19 +5,20 @@ from .distaz import DistAZ
 from .setuplog import SetupLog
 from .utils import WGS84_to_cartesian
 from scipy.spatial import distance
+from sklearn.metrics.pairwise import haversine_distances
 pd.options.mode.chained_assignment = None  # default='warn'
 
 class SrcRec():
     """I/O for source <--> receiver file
+
+    :param fname: Path to src_rec file
+    :type fname: str
+    :param src_only: Whether to read only source information, defaults to False
+    :type src_only: bool, optional
     """
     def __init__(self, fname: str, src_only=False) -> None:
         """
-        :param fname: Path to src_rec file
-        :type fname: str
-        :param src_only: Whether to read only source information, defaults to False
-        :type src_only: bool, optional
         """
-
         self.src_only = src_only
         self.src_points = None
         self.rec_points = None
@@ -30,6 +31,83 @@ class SrcRec():
                 src_only={self.src_only}, \n\
                 number of sources={self.src_points.shape[0]}, \n\
                 number of receivers={self.rec_points.shape[0]}"
+
+    @property
+    def src_points(self):
+        """Return a DataFrame of all sources
+
+        :return: All sources
+        :rtype: pandas.DataFrame
+        
+        Sources contain 8 columns:
+
+        ================ ===================================================
+        Column            Description
+        ================ ===================================================
+        ``origin_time``  Origin time of the source
+        ``evla``         Latitude of the source
+        ``evlo``         Longitude of the source
+        ``evdp``         Focal depth
+        ``mag``          Magnitude of the source
+        ``num_rec``      Number of receivers that recorded the source
+        ``event_id``     ID of the source
+        ``weight``       Weight of the source applied on objective function
+        ================ ===================================================
+        """
+        return self._src_points
+
+    @src_points.setter
+    def src_points(self, value):
+        if value is None or isinstance(value, pd.DataFrame):
+            self._src_points = value
+        else:
+            raise TypeError('src_points should be in DataFrame')
+
+    @property
+    def rec_points(self):
+        """Return a DataFrame of all receivers
+
+        :return: All receivers
+        :rtype: pandas.DataFrame
+        
+        Receivers contain 9 ~ 11 columns:
+
+        Common fields 
+        -----------------
+
+        ================ =====================================================
+        Column            Description
+        ================ =====================================================
+        ``src_index``    Index of source recorded by the receiver
+        ``rec_index``    Index of receivers that recorded the same source
+        ``staname``      Name of the receiver
+        ``stla``         Latitude of the receiver
+        ``stlo``         Longitude of the receiver
+        ``stel``         Elevation of the receiver
+        ``phase``        Phase name
+        ``tt``           Travel time of the source receiver pair
+        ``weight``       Weight of the receiver applied on objective function
+        ================ =====================================================
+
+        Optional fields
+        ----------------
+
+        ================ ===========================================================================
+        Column            Description
+        ================ ===========================================================================
+        ``netname``      Name of the network (when ``name_net_and_sta=True`` in ``SrcRec.read``)
+        ``dist_deg``     Epicentral distance in deg (when ``dist_in_data=True`` in ``SrcRec.read``)
+        ================ ===========================================================================
+
+        """
+        return self._rec_points
+    
+    @rec_points.setter
+    def rec_points(self, value):
+        if value is None or isinstance(value, pd.DataFrame):
+            self._rec_points = value
+        else:
+            raise TypeError('rec_points should be in DataFrame')
 
     @classmethod
     def read(cls, fname:str, dist_in_data=False, name_net_and_sta=False, **kwargs):
@@ -459,14 +537,12 @@ In this case, please set dist_in_data=True and read again.""")
         self.rec_points['num_events'] = self.rec_points.groupby('staname')['num_events'].transform('max')
 
     def _calc_weights(self, lat, lon, scale):
-        x, y, _ = WGS84_to_cartesian(
-            0, lat, lon
-        )
-        points = pd.concat([x, y], axis=1)
-        dist = distance.cdist(points, points)
+        points = pd.concat([lon, lat], axis=1)
+        points_rad =points *(np.pi / 180)
+        dist = haversine_distances(points_rad)* 6371.0/111.19
         dist_ref = scale*np.mean(dist)
         om = np.exp(-(dist/dist_ref)**2)*points.shape[0]
-        return 1/np.mean(om, axis=1)
+        return 1/np.mean(om, axis=0)
 
     def geo_weighting(self, scale=0.5, rec_weight=False):
         """Calculating geographical weights for sources
@@ -578,15 +654,17 @@ In this case, please set dist_in_data=True and read again.""")
 
     def write_receivers(self, fname:str):
         """
-        Write receivers to a txt file
-        :param fname: Path to output txt file of stations
+        Write receivers to a txt file.
+
+        :param fname: Path to output txt file of receivers
         """
         recs = self.rec_points[['staname', 'stla', 'stlo', 'stel', 'weight']].drop_duplicates()
         recs.to_csv(fname, sep=' ', header=False, index=False)
 
     def write_sources(self, fname:str):
         """
-        Write sources to a txt file
+        Write sources to a txt file.
+
         :param fname: Path to output txt file of sources
         """
         srcs = self.src_points[['event_id', 'evla', 'evlo', 'evdp', 'weight']]
@@ -615,6 +693,10 @@ In this case, please set dist_in_data=True and read again.""")
 
         # Convert to SrcRec format
         sr.src_points, sr.rec_points = seispyio.to_src_rec_points()
+        
+        # update number of receivers
+        sr.update_num_rec()
+
         return sr
 
     # implemented in vis.py
