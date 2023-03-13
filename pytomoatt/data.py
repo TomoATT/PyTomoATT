@@ -17,6 +17,7 @@ class ATTData():
         self.grid_glob_r = None
         self.grid_glob_t = None
         self.grid_glob_p = None
+        self.group_name = 'model'
         self.fields = []
         self.input_params = ATTPara(fname_params).input_params
         self.ndiv_r, self.ndiv_t, self.ndiv_p = self.input_params['parallel']['ndiv_rtp']
@@ -35,10 +36,11 @@ class ATTData():
     @classmethod
     def read(cls, fname:str, fname_params:str,
                 fname_grid='OUTPUT_FILES/out_data_grid.h5',
-                dataset_name=None,
+                group_name='model', dataset_name=None,
                 format='hdf5'):
         attdata = cls(fname, fname_params, fname_grid)
         attdata.format = format
+        attdata.group_name = group_name
         # open grid data file
         if attdata.format == 'hdf5':
             attdata._read_h5()
@@ -56,7 +58,7 @@ class ATTData():
                 attdata._data_retrieval()
         elif isinstance(dataset_name, (list, tuple)) and attdata.format == 'hdf5':
             for key in dataset_name:
-                if not (key in attdata.fdata['model'].keys()):
+                if not (key in attdata.fdata[attdata.group_name].keys()):
                     raise ValueError('Error dataset_name of {}. \n{} are available.'.format(key, ', '.join(attdata.fgrid.keys())))
                 attdata._add_field(key)
                 print(attdata.vel)
@@ -64,7 +66,7 @@ class ATTData():
                 attdata.grid_glob_t, attdata.grid_glob_p = \
                 attdata._data_retrieval(dataset_name=key)
         elif dataset_name is None and attdata.format == 'hdf5':
-            for key in attdata.fdata['model'].keys():
+            for key in attdata.fdata[attdata.group_name].keys():
                 attdata._add_field(key)
                 attdata.__dict__[key], attdata.grid_glob_r, \
                 attdata.grid_glob_t, attdata.grid_glob_p = \
@@ -74,7 +76,7 @@ class ATTData():
         return attdata
 
     def _read_data_hdf5(self, offset, n_points_total_sub, dataset_name):
-        data_sub = self.fdata['model'][dataset_name][offset:offset+n_points_total_sub]
+        data_sub = self.fdata[attdata.group_name][dataset_name][offset:offset+n_points_total_sub]
         grid_sub_p = self.fgrid["/Mesh/node_coords_p"][offset:offset+n_points_total_sub]
         grid_sub_t = self.fgrid["/Mesh/node_coords_t"][offset:offset+n_points_total_sub]
         grid_sub_r = self.fgrid["/Mesh/node_coords_r"][offset:offset+n_points_total_sub]
