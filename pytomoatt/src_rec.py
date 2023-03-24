@@ -1,23 +1,29 @@
 import numpy as np
 import tqdm
 import pandas as pd
+from .distaz import DistAZ
+from .setuplog import SetupLog
+from .utils import WGS84_to_cartesian
+from scipy.spatial import distance
+from sklearn.metrics.pairwise import haversine_distances
 pd.options.mode.chained_assignment = None  # default='warn'
 
 class SrcRec():
+    """I/O for source <--> receiver file
 
-    def __init__(self, fname='', src_only=False) -> None:
-        """I/O for source <--> receiver file
-
-        :param fname: Path to src_rec file
-        :type fname: str
-        :param src_only: Whether to read only source information, defaults to False
-        :type src_only: bool, optional
+    :param fname: Path to src_rec file
+    :type fname: str
+    :param src_only: Whether to read only source information, defaults to False
+    :type src_only: bool, optional
+    """
+    def __init__(self, fname: str, src_only=False) -> None:
         """
-
+        """
         self.src_only = src_only
         self.src_points = None
         self.rec_points = None
         self.fnames = [fname]
+        self.log = SetupLog()
 
     def __repr__(self):
         return f"PyTomoATT SrcRec Object: \n\
@@ -25,6 +31,83 @@ class SrcRec():
                 src_only={self.src_only}, \n\
                 number of sources={self.src_points.shape[0]}, \n\
                 number of receivers={self.rec_points.shape[0]}"
+
+    @property
+    def src_points(self):
+        """Return a DataFrame of all sources
+
+        :return: All sources
+        :rtype: pandas.DataFrame
+        
+        Sources contain 8 columns:
+
+        ================ ===================================================
+        Column            Description
+        ================ ===================================================
+        ``origin_time``  Origin time of the source
+        ``evla``         Latitude of the source
+        ``evlo``         Longitude of the source
+        ``evdp``         Focal depth
+        ``mag``          Magnitude of the source
+        ``num_rec``      Number of receivers that recorded the source
+        ``event_id``     ID of the source
+        ``weight``       Weight of the source applied on objective function
+        ================ ===================================================
+        """
+        return self._src_points
+
+    @src_points.setter
+    def src_points(self, value):
+        if value is None or isinstance(value, pd.DataFrame):
+            self._src_points = value
+        else:
+            raise TypeError('src_points should be in DataFrame')
+
+    @property
+    def rec_points(self):
+        """Return a DataFrame of all receivers
+
+        :return: All receivers
+        :rtype: pandas.DataFrame
+        
+        Receivers contain 9 ~ 11 columns:
+
+        Common fields 
+        -----------------
+
+        ================ =====================================================
+        Column            Description
+        ================ =====================================================
+        ``src_index``    Index of source recorded by the receiver
+        ``rec_index``    Index of receivers that recorded the same source
+        ``staname``      Name of the receiver
+        ``stla``         Latitude of the receiver
+        ``stlo``         Longitude of the receiver
+        ``stel``         Elevation of the receiver
+        ``phase``        Phase name
+        ``tt``           Travel time of the source receiver pair
+        ``weight``       Weight of the receiver applied on objective function
+        ================ =====================================================
+
+        Optional fields
+        ----------------
+
+        ================ ===========================================================================
+        Column            Description
+        ================ ===========================================================================
+        ``netname``      Name of the network (when ``name_net_and_sta=True`` in ``SrcRec.read``)
+        ``dist_deg``     Epicentral distance in deg (when ``dist_in_data=True`` in ``SrcRec.read``)
+        ================ ===========================================================================
+
+        """
+        return self._rec_points
+    
+    @rec_points.setter
+    def rec_points(self, value):
+        if value is None or isinstance(value, pd.DataFrame):
+            self._rec_points = value
+        else:
+            raise TypeError('rec_points should be in DataFrame')
 
     @classmethod
     def read(cls, fname:str, dist_in_data=False, name_net_and_sta=False, **kwargs):
@@ -68,7 +151,7 @@ class SrcRec():
         try:
             datedf = datedf.astype(type_dict)
         except:
-            print("Error: please check the date format in the src_rec file")
+            sr.log.SrcReclog.error("please check the date format in the src_rec file")
             return sr.src_points
         dateseris = datedf.astype(str).apply(lambda x: '.'.join(x), axis=1).apply(
             pd.to_datetime, format='%Y.%m.%d.%H.%M.%S.%f')
@@ -90,7 +173,7 @@ class SrcRec():
         try:
             src_data = src_data.astype(type_dict)
         except:
-            print("Error2: please check the event data format in the src_rec file")
+            sr.log.SrcReclog.error("please check the event data format in the src_rec file")
             return sr.src_points
 
         # concat all the 3 dataframes
@@ -117,8 +200,8 @@ class SrcRec():
 
             # warning if weigh value is greater than 10
             if (sr.rec_points.loc[:, last_col+1] > 10).any():
-                print("""
-Warning: at least one weight value is greater than 10.
+                sr.log.SrcReclog.warning("""
+at least one weight value is greater than 10.
 Probably your src_rec file includes distance data.
 In this case, please set dist_in_data=True and read again.""")
 
@@ -179,6 +262,8 @@ In this case, please set dist_in_data=True and read again.""")
                     ))
 
     def reset_index(self):
+        """Reset index of source and receivers.
+        """
         # reset src_index to be 0, 1, 2, ... for both src_points and rec_points
         self.rec_points['src_index'] = self.rec_points['src_index'].map(
             dict(zip(self.src_points.index, np.arange(len(self.src_points)))))
@@ -227,13 +312,20 @@ In this case, please set dist_in_data=True and read again.""")
         # store fnames
         self.fnames.extend(sr.fnames)
 
-    def remove_rec_by_new_src(self):
+    def remove_rec_by_new_src(self, verbose=True):
         """
         remove rec_points by new src_points
         """
-        print('rec_points before removing: ', self.rec_points.shape)
+        if verbose:
+            self.log.SrcReclog.info('rec_points before removing: {}'.format(self.rec_points.shape))
         self.rec_points = self.rec_points[self.rec_points['src_index'].isin(self.src_points.index)]
-        print('rec_points after removing: ', self.rec_points.shape)
+        if verbose:
+            self.log.SrcReclog.info('rec_points after removing: {}'.format(self.rec_points.shape))
+    
+    def remove_src_by_new_rec(self):
+        """remove src_points by new receivers 
+        """
+        self.src_points = self.src_points[self.src_points.index.isin(self.rec_points['src_index'])]
 
     def update_num_rec(self):
         """
@@ -253,12 +345,13 @@ In this case, please set dist_in_data=True and read again.""")
         """
         check and count how many events are duplicated,
         under given threshold of distance, depth, and time.
-        thre_deg : float
-            threshold of distance in degree
-        thre_dep : float
-            threshold of depth in km
-        thre_time_in_min : float
-            threshold of time in minutes
+
+        :param thre_deg: threshold of distance in degree
+        :type thre_deg: float
+        :param thre_dep: threshold of distance in degree
+        :type thre_dep: float
+        :param thre_time_in_min: hreshold of time in minutes
+        :type thre_time_in_min: float
         """
 
         # sort event data
@@ -292,7 +385,7 @@ In this case, please set dist_in_data=True and read again.""")
 
             # print iterate count and number of rows, number of duplicated rows
             num_duplicated = self.src_points[(self.src_points["duplicated+1"]==1) | (self.src_points["duplicated-1"]==1)].shape[0]
-            print("iteration: ", iter_count, "num_duplicated: ", num_duplicated)
+            self.log.SrcReclog.info("iteration: {}; num_duplicated: {}".format(iter_count, num_duplicated))
 
             iter_count += 1
 
@@ -311,13 +404,15 @@ In this case, please set dist_in_data=True and read again.""")
     def select_phase(self, phase_list):
         """
         select interested phase and remove others
-        phase_list : list of str
+
+        :param phase_list: List of phases for travel times used for inversion
+        :type phase_list: list of str
         """
         if not isinstance(phase_list, (list, str)):
             raise TypeError('phase_list should be in list or str')
-        print('rec_points before selecting: ', self.rec_points.shape)
+        self.log.SrcReclog.info('rec_points before selecting: {}'.format(self.rec_points.shape))
         self.rec_points = self.rec_points[self.rec_points['phase'].isin(phase_list)]
-        print('rec_points after selecting: ', self.rec_points.shape)
+        self.log.SrcReclog.info('rec_points after selecting: {}'.format(self.rec_points.shape))
 
         # modify num_rec in src_points
         self.src_points['num_rec'] = self.rec_points.groupby('src_index').size()
@@ -329,10 +424,13 @@ In this case, please set dist_in_data=True and read again.""")
     def select_box_region(self, region):
         """
         Select sources and station in a box region
-        param region: Box region defined as [lon1, lon2, lat1, lat2]
+
+        :param region: Box region defined as [lon1, lon2, lat1, lat2]
         :type region: iterable
         """
         # select source within this region.
+        self.log.SrcReclog.info('src_points before selecting: {}'.format(self.src_points.shape))
+        self.log.SrcReclog.info('rec_points before selecting: {}'.format(self.rec_points.shape))
         self.src_points = self.src_points[
             (self.src_points['evlo'] >= region[0]) &
             (self.src_points['evlo'] <= region[1]) &
@@ -341,7 +439,7 @@ In this case, please set dist_in_data=True and read again.""")
         ]
 
         # Remove receivers whose events have been removed
-        self.remove_rec_by_new_src()
+        self.remove_rec_by_new_src(verbose=False)
 
         # Remove rest receivers out of region.
         self.rec_points = self.rec_points[
@@ -354,17 +452,57 @@ In this case, please set dist_in_data=True and read again.""")
         # Remove empty sources
         self.src_points = self.src_points[self.src_points.index.isin(self.rec_points['src_index'])]
         self.update_num_rec()
+        self.log.SrcReclog.info('src_points after selecting: {}'.format(self.src_points.shape))
+        self.log.SrcReclog.info('rec_points after selecting: {}'.format(self.rec_points.shape))
+
+    def calc_distance(self):
+        """Calculate epicentral distance
+        """
+        self.rec_points['dist'] = 0.
+        rec_group = self.rec_points.groupby('src_index')
+        for idx, rec in rec_group:
+            dist = DistAZ(
+                self.src_points.loc[idx]['evla'],
+                self.src_points.loc[idx]['evlo'],
+                rec['stla'].values, rec['stlo'].values
+            ).delta
+            self.rec_points['dist'].loc[rec.index] = dist
+
+    def select_distance(self, dist_min_max, recalc_dist=False):
+        """Select stations in a range of distance 
+
+        :param dist_min_max: limit of distance, ``[dist_min, dist_max]``
+        :type dist_min_max: list or tuple
+        """
+        self.log.SrcReclog.info('rec_points before selecting: {}'.format(self.rec_points.shape))
+        # rec_group = self.rec_points.groupby('src_index')
+        if ('dist' not in self.rec_points) or recalc_dist:
+            self.log.SrcReclog.info('Calculating epicentral distance...')
+            self.calc_distance()
+        elif not recalc_dist:
+            pass
+        else:
+            self.log.SrcReclog.error('No such field of dist, please set up recalc_dist to True')
+        # for _, rec in rec_group:
+        mask = (self.rec_points['dist'] < dist_min_max[0]) \
+            | (self.rec_points['dist'] > dist_min_max[1])
+        drop_idx = self.rec_points[mask].index
+        self.rec_points = self.rec_points.drop(index=drop_idx)
+        self.remove_src_by_new_rec()
+        self.update_num_rec()
+        self.log.SrcReclog.info('rec_points after selecting: {}'.format(self.rec_points.shape))
 
     def select_one_event_in_each_subgrid(self, d_deg:float, d_km:float):
+        """ select one event in each subgrid
+        
+        :param d_deg: grid size in degree
+        :type d_deg: float
+        :param d_km: grid size in km
+        :type d_km: float
         """
-        select one event in each subgrid
-        d_deg : float
-            grid size in degree
-        d_km : float
-            grid size in km
-        """
-        print('src_points before selecting: ', self.src_points.shape)
-        print('processing... (this may take a few minutes)')
+   
+        self.log.SrcReclog.info('src_points before selecting: {}'.format(self.src_points.shape))
+        self.log.SrcReclog.info('processing... (this may take a few minutes)')
 
         # store index of src_points as 'src_index'
         self.src_points['src_index'] = self.src_points.index
@@ -392,7 +530,7 @@ In this case, please set dist_in_data=True and read again.""")
         # sort src_points by index
         self.src_points = self.src_points.sort_index()
 
-        print('src_points after selecting: ', self.src_points.shape)
+        self.log.SrcReclog.info('src_points after selecting: {}'.format(self.src_points.shape))
 
         # remove rec_points by new src_points
         self.remove_rec_by_new_src()
@@ -406,6 +544,34 @@ In this case, please set dist_in_data=True and read again.""")
         # reflect the total number of events for each station
         self.rec_points['num_events'] = self.rec_points.groupby('staname')['num_events'].transform('max')
 
+    def _calc_weights(self, lat, lon, scale):
+        points = pd.concat([lon, lat], axis=1)
+        points_rad =points *(np.pi / 180)
+        dist = haversine_distances(points_rad)* 6371.0/111.19
+        dist_ref = scale*np.mean(dist)
+        om = np.exp(-(dist/dist_ref)**2)*points.shape[0]
+        return 1/np.mean(om, axis=0)
+
+    def geo_weighting(self, scale=0.5, rec_weight=False):
+        """Calculating geographical weights for sources
+
+        :param scale: Scale of reference distance parameter See equation 22 in Ruan et al., (2019),
+                      The reference distance is given by ``scale``* dis_average, defaults to 0.5
+        :type scale: float, optional
+        """
+        
+        self.src_points['weight'] = self._calc_weights(
+            self.src_points['evla'],
+            self.src_points['evlo'],
+            scale
+        )
+        if rec_weight:
+            # self.rec_points['weight'] = self._calc_weights(
+            #     self.src_points['stla'],
+            #     self.src_points['stlo'],
+            #     scale
+            # )
+            pass # TODO: add weights for receivers
     #
     # This function is comment out temprarly because it includes verified bug and not modified.
     #
@@ -496,15 +662,17 @@ In this case, please set dist_in_data=True and read again.""")
 
     def write_receivers(self, fname:str):
         """
-        Write receivers to a txt file
-        :param fname: Path to output txt file of stations
+        Write receivers to a txt file.
+
+        :param fname: Path to output txt file of receivers
         """
         recs = self.rec_points[['staname', 'stla', 'stlo', 'stel', 'weight']].drop_duplicates()
         recs.to_csv(fname, sep=' ', header=False, index=False)
 
     def write_sources(self, fname:str):
         """
-        Write sources to a txt file
+        Write sources to a txt file.
+
         :param fname: Path to output txt file of sources
         """
         srcs = self.src_points[['event_id', 'evla', 'evlo', 'evdp', 'weight']]
@@ -521,7 +689,7 @@ In this case, please set dist_in_data=True and read again.""")
         :rtype: SrcRec
         """
         from .io.seispy import Seispy
-        sr = cls()
+        sr = cls('')
         # Initial an instance of Seispy
         seispyio = Seispy(rf_path)
 
@@ -533,16 +701,20 @@ In this case, please set dist_in_data=True and read again.""")
 
         # Convert to SrcRec format
         sr.src_points, sr.rec_points = seispyio.to_src_rec_points()
+        
+        # update number of receivers
+        sr.update_num_rec()
+
         return sr
 
     # implemented in vis.py
     def plot(self, weight=False, fname=None):
         """Plot source and receivers for preview
 
-        :param weight: _description_, defaults to False
+        :param weight: Draw colors of weights, defaults to False
         :type weight: bool, optional
-        :param fname: _description_, defaults to None
-        :type fname: _type_, optional
+        :param fname: Path to output file, defaults to None
+        :type fname: str, optional
         :return: _description_
         :rtype: _type_
         """

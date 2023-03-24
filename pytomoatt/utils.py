@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.interpolate import griddata
 
 def sind(deg):
     rad = np.radians(deg)
@@ -99,11 +100,6 @@ def init_axis(min_max_dep, min_max_lat, min_max_lon, n_rtp):
     return dd, tt, pp, dr, dt, dp
 
 
-def xieta2ani(self, xi, eta):
-    epsilon = np.sqrt(eta**2+xi**2)
-    phi = 0.5*asind(eta/epsilon)
-    return epsilon, phi
-
 def to_vtk(fname:str, model:dict, dep, lat, lon):
     """convert model initial model VTK file
 
@@ -123,9 +119,26 @@ def to_vtk(fname:str, model:dict, dep, lat, lon):
         import pyvista as pv
     except:
         raise ModuleNotFoundError('Please install pyvista first')
-    dd, tt, pp = np.meshgrid(np.flip(dep), lat, lon, indexing='ij')
+    dd, tt, pp = np.meshgrid(dep, lat, lon, indexing='ij')
     x, y, z = WGS84_to_cartesian(dd, tt, pp)
     grid = pv.StructuredGrid(x, y, z)
     for key, value in model.items():
         grid.point_data[key] = value[:].flatten(order="F")
     grid.save(fname)
+
+
+def ignore_nan_3d(data):
+    index = np.where(~np.isnan(data))
+    values = data[index]
+    points = np.array(index).T
+    zidx = np.arange(data.shape[0])
+    yidx = np.arange(data.shape[1])
+    xidx = np.arange(data.shape[2])
+    zz, xx, yy = np.meshgrid(zidx, yidx, xidx, indexing='ij')
+    interpolated = griddata(
+        points, values, 
+        (zz, xx, yy), 
+        method='nearest'
+    )
+    result = interpolated.reshape(data.shape)
+    return result

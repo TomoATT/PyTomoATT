@@ -4,9 +4,10 @@ from scipy.interpolate import interpn
 from pyproj import Geod
 
 class Dataset(xarray.Dataset):
+    """Sub class of `xarray.Dataset <https://docs.xarray.dev/en/stable/generated/xarray.Dataset.html>`__
+    """
     def __init__(self, data_vars, coords, attrs=None) -> None:
-        """Sub class of xarray.Dataset
-        """
+
         __slots__ = ()
         super().__init__(data_vars, coords, attrs)
 
@@ -23,7 +24,7 @@ class Dataset(xarray.Dataset):
         if field not in self.data_vars.keys():
             raise ValueError('Error field name of {}'.format(field))
         idx = np.where(self.coords['dep'].values == depth)[0]
-        if idx:
+        if idx.size > 0:
             offset = 0
             data = np.zeros([self.coords['lat'].size*self.coords['lon'].size, 3])
             for i, la in enumerate(self.coords['lat'].values):
