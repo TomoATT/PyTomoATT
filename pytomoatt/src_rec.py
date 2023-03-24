@@ -241,6 +241,14 @@ In this case, please set dist_in_data=True and read again.""")
         """
         self.src_points['num_rec'] = self.rec_points.groupby('src_index').size()
 
+    def erase_src_with_no_rec(self):
+        """
+        erase src_points with no rec_points
+        """
+        print('src_points before removing: ', self.src_points.shape)
+        self.src_points = self.src_points[self.src_points['num_rec'] > 0]
+        print('src_points after removing: ', self.src_points.shape)
+
     def erase_duplicate_events(self, thre_deg:float, thre_dep:float, thre_time_in_min:float):
         """
         check and count how many events are duplicated,
