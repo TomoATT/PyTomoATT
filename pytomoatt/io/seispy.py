@@ -51,7 +51,7 @@ class Seispy:
         """
         # Select all unique events and save to src_points
         self.src_points = self.rf_info[['event_id', 'evla', 'evlo', 'evdp', 'mag']]
-        self.src_points.drop_duplicates(keep='first', ignore_index=True)
+        self.src_points = self.src_points.drop_duplicates(keep='first', ignore_index=True)
         self.src_points['num_rec'] = [0]*self.src_points.shape[0]
         self.src_points['weight'] = [1.]*self.src_points.shape[0]
         self.src_points['origin_time'] = pd.to_datetime(

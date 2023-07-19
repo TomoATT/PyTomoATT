@@ -6,7 +6,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 
-VERSION = "0.1.5"
+VERSION = "0.1.6"
 setup(name='PyTomoATT',
       version=VERSION,
       author='Mijian Xu, Masaru Nagaso',
@@ -27,7 +27,8 @@ setup(name='PyTomoATT',
                 'argcomplete',
                 'tqdm',
                 'obspy',
-                'pyproj'],
+                'pyproj',
+                'scikit-learn'],
       entry_points={'console_scripts':['pta=pytomoatt.script:main']},
       zip_safe=False,
       classifiers=['Programming Language :: Python',

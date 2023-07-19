@@ -47,7 +47,7 @@ jobs:
       - name: test
         run: |
           cd test
-          pytest -v --cov=seispy --cov-report=xml
+          pytest -v --cov=pytomoatt --cov-report=xml
       - name: Upload to codecov
         uses: codecov/codecov-action@v2
         with:

@@ -24,7 +24,7 @@ class Dataset(xarray.Dataset):
         if field not in self.data_vars.keys():
             raise ValueError('Error field name of {}'.format(field))
         idx = np.where(self.coords['dep'].values == depth)[0]
-        if idx:
+        if idx.size > 0:
             offset = 0
             data = np.zeros([self.coords['lat'].size*self.coords['lon'].size, 3])
             for i, la in enumerate(self.coords['lat'].values):

@@ -28,13 +28,13 @@ def plot_srcrec(SR, weight=False, fname=None):
         SR.src_points['_evdp'] = SR.src_points['evdp'] # for protting
         ds = gv.Dataset(SR.src_points, kdims=['evlo','evla','evdp','_evdp'], vdims=['num_rec'])
 
-        #lola = rasterize(gv.Points(ds, kdims=['evlo','evla'],  vdims=['num_rec'])).opts(cmap='viridis')
-        #lod  = rasterize(gv.Points(ds, kdims=['evlo','evdp'],  vdims=['num_rec'])).opts(cmap='viridis')
-        #lad  = rasterize(gv.Points(ds, kdims=['_evdp','evla'], vdims=['num_rec'])).opts(cmap='viridis')     #.opts(invert_yaxis=True)
+        lola = rasterize(gv.Points(ds, kdims=['evlo','evla'],  vdims=['num_rec'])).opts(cmap='viridis')
+        lod  = rasterize(gv.Points(ds, kdims=['evlo','evdp'],  vdims=['num_rec'])).opts(cmap='viridis')
+        lad  = rasterize(gv.Points(ds, kdims=['_evdp','evla'], vdims=['num_rec'])).opts(cmap='viridis')     #.opts(invert_yaxis=True)
 
-        lola = spread(rasterize(gv.Points(ds, kdims=['evlo','evla'],  vdims=['num_rec']), aggregator="sum").opts(cmap='viridis'))
-        lod  = spread(rasterize(gv.Points(ds, kdims=['evlo','evdp'],  vdims=['num_rec']), aggregator="sum").opts(cmap='viridis'))
-        lad  = spread(rasterize(gv.Points(ds, kdims=['_evdp','evla'], vdims=['num_rec']), aggregator="sum").opts(cmap='viridis'))     #.opts(invert_yaxis=True)
+        #lola = spread(rasterize(gv.Points(ds, kdims=['evlo','evla'],  vdims=['num_rec']), aggregator="sum").opts(cmap='viridis'))
+        #lod  = spread(rasterize(gv.Points(ds, kdims=['evlo','evdp'],  vdims=['num_rec']), aggregator="sum").opts(cmap='viridis'))
+        #lad  = spread(rasterize(gv.Points(ds, kdims=['_evdp','evla'], vdims=['num_rec']), aggregator="sum").opts(cmap='viridis'))     #.opts(invert_yaxis=True)
 
         # station points
         SR.count_events_per_station()
