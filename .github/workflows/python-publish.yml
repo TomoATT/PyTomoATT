@@ -40,4 +40,7 @@ jobs:
       
   Build_docs:
     uses: ./.github/workflows/build-docs.yml
+    with:
+      config-path: .github/workflows/build-docs.yml
+    secrets: inherit
 
