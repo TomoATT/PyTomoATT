@@ -42,5 +42,5 @@ jobs:
     uses: ./.github/workflows/build-docs.yml
     with:
       config-path: .github/workflows/build-docs.yml
-    secrets: inherit
+    secrets: ${{ secrets.GITHUB_TOKEN }}
 
