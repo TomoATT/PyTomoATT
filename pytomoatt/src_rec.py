@@ -486,12 +486,27 @@ In this case, please set dist_in_data=True and read again.""")
         self.reset_index()
         self.log.SrcReclog.info('rec_points after selecting: {}'.format(self.rec_points.shape))
 
+    def select_by_num_rec(self, num_rec: int):
+        """ select sources with recievers greater and equal than a number
+        :param num_rec: threshold of minimum receiver number
+        :type num_rec: int
+        """
+        self.update_num_rec()
+        self.log.SrcReclog.info('src_points before selecting: {}'.format(self.src_points.shape))
+        self.log.SrcReclog.info('rec_points before selecting: {}'.format(self.rec_points.shape))
+        self.src_points = self.src_points[
+            (self.src_points['num_rec'] > num_rec)
+        ]
+        self.remove_rec_by_new_src(False)
+        self.log.SrcReclog.info('src_points after selecting: {}'.format(self.src_points.shape))
+        self.log.SrcReclog.info('rec_points after selecting: {}'.format(self.rec_points.shape))
+
     def select_one_event_in_each_subgrid(self, d_deg:float, d_km:float):
         """ select one event in each subgrid
         
-        :param d_deg: grid size in degree
+        :param d_deg: grid size along lat and lon in degree
         :type d_deg: float
-        :param d_km: grid size in km
+        :param d_km: grid size along depth axis in km
         :type d_km: float
         """
    
