@@ -286,6 +286,9 @@ In this case, please set dist_in_data=True and read again.""")
 
         if self.src_only != sr.src_only:
             raise ValueError('Cannot append src_only and non-src_only SrcRec objects')
+        
+        self.reset_index()
+        sr.reset_index()
 
         # number of sources to be added
         n_src_offset = self.src_points.shape[0]
@@ -301,7 +304,7 @@ In this case, please set dist_in_data=True and read again.""")
         # append src_points
         self.src_points = pd.concat([self.src_points, sr.src_points], ignore_index=True)
         self.src_points.index.name = 'src_index'
-        self.src_points.index += 1  # start from 1
+        # self.src_points.index += 1  # start from 1
 
         if not self.src_only:
             # update src_index in rec_points
