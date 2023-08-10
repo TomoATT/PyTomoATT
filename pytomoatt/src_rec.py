@@ -444,6 +444,7 @@ In this case, please set dist_in_data=True and read again.""")
         # Remove empty sources
         self.src_points = self.src_points[self.src_points.index.isin(self.rec_points['src_index'])]
         self.update_num_rec()
+        self.reset_index()
         self.log.SrcReclog.info('src_points after selecting: {}'.format(self.src_points.shape))
         self.log.SrcReclog.info('rec_points after selecting: {}'.format(self.rec_points.shape))
 
@@ -482,6 +483,7 @@ In this case, please set dist_in_data=True and read again.""")
         self.rec_points = self.rec_points.drop(index=drop_idx)
         self.remove_src_by_new_rec()
         self.update_num_rec()
+        self.reset_index()
         self.log.SrcReclog.info('rec_points after selecting: {}'.format(self.rec_points.shape))
 
     def select_one_event_in_each_subgrid(self, d_deg:float, d_km:float):
