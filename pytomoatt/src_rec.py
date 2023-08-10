@@ -464,7 +464,7 @@ In this case, please set dist_in_data=True and read again.""")
     def select_distance(self, dist_min_max, recalc_dist=False):
         """Select stations in a range of distance 
 
-        :param dist_min_max: limit of distance, ``[dist_min, dist_max]``
+        :param dist_min_max: limit of distance in deg, ``[dist_min, dist_max]``
         :type dist_min_max: list or tuple
         """
         self.log.SrcReclog.info('rec_points before selecting: {}'.format(self.rec_points.shape))
@@ -495,7 +495,7 @@ In this case, please set dist_in_data=True and read again.""")
         self.log.SrcReclog.info('src_points before selecting: {}'.format(self.src_points.shape))
         self.log.SrcReclog.info('rec_points before selecting: {}'.format(self.rec_points.shape))
         self.src_points = self.src_points[
-            (self.src_points['num_rec'] > num_rec)
+            (self.src_points['num_rec'] >= num_rec)
         ]
         self.remove_rec_by_new_src(False)
         self.log.SrcReclog.info('src_points after selecting: {}'.format(self.src_points.shape))
