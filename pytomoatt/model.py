@@ -132,6 +132,14 @@ class ATTModel():
         """
         self.vel = gaussian_filter(self.vel, sigma)
 
+    def calc_dv_avg(self):
+        """calculate anomalies relative to average velocity at each depth
+        """
+        self.dlnv = np.zeros_like(self.vel)
+        for i, _ in enumerate(self.depths):
+            avg = np.mean(self.vel[i, :, :])
+            self.dlnv[i, :, :] = 100 * (self.vel[i, :, :] - avg)/avg
+
     def calc_dv(self, ref_mod_fname: str):
         """calculate anomalies relative to another model
 
