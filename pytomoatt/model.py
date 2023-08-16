@@ -5,7 +5,7 @@ from .para import ATTPara
 from .io.crustmodel import CrustModel
 from .io.asciimodel import ASCIIModel
 from .attarray import Dataset
-from .utils import init_axis, acosd
+from .utils import init_axis, acosd, atand
 
 
 class ATTModel():
@@ -66,8 +66,15 @@ class ATTModel():
         """
         self.epsilon = np.sqrt(self.eta**2+self.xi**2)
         self.phi = np.zeros_like(self.epsilon)
-        idx_non_zero = np.where(self.epsilon != 0)
-        self.phi[idx_non_zero] = 0.5*acosd(self.xi[idx_non_zero]/self.epsilon[idx_non_zero])
+        idx = np.where(self.xi <= 0)
+        self.phi[idx] = 90 + 0.5*atand(self.eta[idx]/self.xi[idx])
+        idx = np.where((self.xi > 0) & (self.eta <= 0))
+        self.phi[idx] = 180 + 0.5*atand(self.eta[idx]/self.xi[idx])
+        idx = np.where((self.xi > 0) & (self.eta > 0))
+        self.phi[idx] = 0.5*atand(self.eta[idx]/self.xi[idx])
+
+        # idx_non_zero = np.where(self.epsilon != 0)
+        # self.phi[idx_non_zero] = 0.5*acosd(self.xi[idx_non_zero]/self.epsilon[idx_non_zero])
 
     def to_xarray(self):
         """Convert to xarray

@@ -11,6 +11,11 @@ class Dataset(xarray.Dataset):
         __slots__ = ()
         super().__init__(data_vars, coords, attrs)
 
+    @classmethod
+    def from_xarray(cls, dataset):
+        ds = cls(dataset.data_vars, dataset.coords)
+        return ds
+
     def interp_dep(self, depth:float, field:str):
         """Interpolate map view with given depth
 
