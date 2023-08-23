@@ -103,8 +103,8 @@ class Checker():
         self.dlnv = self.perturbation*pert_vel
         self.epsilon = np.abs(self.perturbation)*pert_ani
         self.phi = np.zeros_like(self.vel)
-        self.phi[np.where(self.perturbation>0)] = 120.
-        self.phi[np.where(self.perturbation<0)] = 60.
+        self.phi[np.where(self.perturbation>0)] = 135.
+        self.phi[np.where(self.perturbation<0)] = 45.
         self.xi = self.epsilon*cosd(2*self.phi)
         self.eta = self.epsilon*sind(2*self.phi)
 
