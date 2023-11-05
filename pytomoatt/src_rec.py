@@ -286,6 +286,9 @@ In this case, please set dist_in_data=True and read again.""")
 
         if self.src_only != sr.src_only:
             raise ValueError('Cannot append src_only and non-src_only SrcRec objects')
+        
+        self.reset_index()
+        sr.reset_index()
 
         # number of sources to be added
         n_src_offset = self.src_points.shape[0]
@@ -301,7 +304,7 @@ In this case, please set dist_in_data=True and read again.""")
         # append src_points
         self.src_points = pd.concat([self.src_points, sr.src_points], ignore_index=True)
         self.src_points.index.name = 'src_index'
-        self.src_points.index += 1  # start from 1
+        # self.src_points.index += 1  # start from 1
 
         if not self.src_only:
             # update src_index in rec_points
@@ -452,6 +455,7 @@ In this case, please set dist_in_data=True and read again.""")
         # Remove empty sources
         self.src_points = self.src_points[self.src_points.index.isin(self.rec_points['src_index'])]
         self.update_num_rec()
+        self.reset_index()
         self.log.SrcReclog.info('src_points after selecting: {}'.format(self.src_points.shape))
         self.log.SrcReclog.info('rec_points after selecting: {}'.format(self.rec_points.shape))
 
@@ -471,7 +475,7 @@ In this case, please set dist_in_data=True and read again.""")
     def select_distance(self, dist_min_max, recalc_dist=False):
         """Select stations in a range of distance 
 
-        :param dist_min_max: limit of distance, ``[dist_min, dist_max]``
+        :param dist_min_max: limit of distance in deg, ``[dist_min, dist_max]``
         :type dist_min_max: list or tuple
         """
         self.log.SrcReclog.info('rec_points before selecting: {}'.format(self.rec_points.shape))
@@ -490,14 +494,30 @@ In this case, please set dist_in_data=True and read again.""")
         self.rec_points = self.rec_points.drop(index=drop_idx)
         self.remove_src_by_new_rec()
         self.update_num_rec()
+        self.reset_index()
+        self.log.SrcReclog.info('rec_points after selecting: {}'.format(self.rec_points.shape))
+
+    def select_by_num_rec(self, num_rec: int):
+        """ select sources with recievers greater and equal than a number
+        :param num_rec: threshold of minimum receiver number
+        :type num_rec: int
+        """
+        self.update_num_rec()
+        self.log.SrcReclog.info('src_points before selecting: {}'.format(self.src_points.shape))
+        self.log.SrcReclog.info('rec_points before selecting: {}'.format(self.rec_points.shape))
+        self.src_points = self.src_points[
+            (self.src_points['num_rec'] >= num_rec)
+        ]
+        self.remove_rec_by_new_src(False)
+        self.log.SrcReclog.info('src_points after selecting: {}'.format(self.src_points.shape))
         self.log.SrcReclog.info('rec_points after selecting: {}'.format(self.rec_points.shape))
 
     def select_one_event_in_each_subgrid(self, d_deg:float, d_km:float):
         """ select one event in each subgrid
         
-        :param d_deg: grid size in degree
+        :param d_deg: grid size along lat and lon in degree
         :type d_deg: float
-        :param d_km: grid size in km
+        :param d_km: grid size along depth axis in km
         :type d_km: float
         """
    
