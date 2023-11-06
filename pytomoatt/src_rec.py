@@ -230,7 +230,8 @@ In this case, please set dist_in_data=True and read again.""")
                         'src_index', 'rec_index', 'netname', 'staname',
                         'stla', 'stlo', 'stel', 'phase', 'dist_deg', 'tt', 'weight'
                     ]
-
+                # change type of rec_index to int
+                sr.rec_points['rec_index'] = sr.rec_points['rec_index'].astype(int)
                 # concatenate network and station name with "_"
                 sr.rec_points['staname'] = sr.rec_points['netname'] + '_' + sr.rec_points['staname']
                 # drop network name column
@@ -423,6 +424,41 @@ In this case, please set dist_in_data=True and read again.""")
         # sort by src_index
         self.src_points.sort_values(by=['src_index'], inplace=True)
         self.rec_points.sort_values(by=['src_index', 'rec_index'], inplace=True)
+
+    def select_by_datetime(self, time_range):
+        """
+        select sources and station in a time range
+
+        :param time_range: Time range defined as [start_time, end_time]
+        :type time_range: iterable
+        """
+        # select source within this time range.
+        self.log.SrcReclog.info('src_points before selecting: {}'.format(self.src_points.shape))
+        self.log.SrcReclog.info('rec_points before selecting: {}'.format(self.rec_points.shape))
+        self.src_points = self.src_points[
+            (self.src_points['origin_time'] >= time_range[0]) &
+            (self.src_points['origin_time'] <= time_range[1])
+        ]
+
+        # Remove receivers whose events have been removed
+        self.remove_rec_by_new_src(verbose=False)
+
+        self.reset_index()
+        self.log.SrcReclog.info('src_points after selecting: {}'.format(self.src_points.shape))
+        self.log.SrcReclog.info('rec_points after selecting: {}'.format(self.rec_points.shape))
+
+    def remove_specified_recs(self, rec_list):
+        """Remove specified receivers
+
+        :param rec_list: List of receivers to be removed
+        :type rec_list: list
+        """
+        self.log.SrcReclog.info('rec_points before removing: {}'.format(self.rec_points.shape))
+        self.rec_points = self.rec_points[~self.rec_points['staname'].isin(rec_list)]
+        self.remove_src_by_new_rec()
+        self.update_num_rec()
+        self.reset_index()
+        self.log.SrcReclog.info('rec_points after removing: {}'.format(self.rec_points.shape))
 
     def select_box_region(self, region):
         """
