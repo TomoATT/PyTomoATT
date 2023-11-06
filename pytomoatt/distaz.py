@@ -3,6 +3,22 @@ import numpy as np
 
 class DistAZ:
     """
+    DistAZ class
+
+    Calculate the distance, azimuth and back-azimuth between two points on the
+    Earth's surface.
+
+    :param lat1: Latitude of point 1
+    :type lat1: float
+    :param lon1: Longitude of point 1
+    :type lon1: float
+    :param lat2: Latitude of point 2
+    :type lat2: float
+    :param lon2: Longitude of point 2
+    :type lon2: float
+    :return: An instance of DistAZ
+    :rtype: DistAZ
+
      Subroutine to calculate the Great Circle Arc distance
         between two sets of geographic coordinates
     
@@ -44,14 +60,13 @@ class DistAZ:
         '''
 
         rad = 2. * np.pi / 360.0
-        """
-        c
-        c scolat and ecolat are the geocentric colatitudes
-        c as defined by Richter (pg. 318)
-        c
-        c Earth Flattening of 1/298.257 take from Bott (pg. 3)
-        c
-        """
+        '''
+        scolat and ecolat are the geocentric colatitudes
+        as defined by Richter (pg. 318)
+        
+        Earth Flattening of 1/298.257 take from Bott (pg. 3)
+        
+        '''
         sph = 1.0 / 298.257
 
         scolat = np.pi / 2.0 - np.arctan((1. - sph) * (1. - sph) * np.tan(lat1 * rad))
@@ -59,10 +74,10 @@ class DistAZ:
         slon = lon1 * rad
         elon = lon2 * rad
         """
-	c
-	c  a - e are as defined by Bullen (pg. 154, Sec 10.2)
-	c     These are defined for the pt. 1
-	c
+    
+	    a - e are as defined by Bullen (pg. 154, Sec 10.2)
+	    These are defined for the pt. 1
+
         """
         a = np.sin(scolat) * np.cos(slon)
         b = np.sin(scolat) * np.sin(slon)

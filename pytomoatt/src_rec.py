@@ -6,6 +6,7 @@ from .setuplog import SetupLog
 from .utils import WGS84_to_cartesian
 from scipy.spatial import distance
 from sklearn.metrics.pairwise import haversine_distances
+import copy
 pd.options.mode.chained_assignment = None  # default='warn'
 
 class SrcRec():
@@ -261,6 +262,14 @@ In this case, please set dist_in_data=True and read again.""")
                         idx, rec['rec_index'], rec['staname'], rec['stla'],
                         rec['stlo'], rec['stel'], rec['phase'], rec['tt'], rec['weight']
                     ))
+    
+    def copy(self):
+        """Return a copy of SrcRec object
+
+        :return: Copy of SrcRec object
+        :rtype: SrcRec
+        """
+        return copy.deepcopy(self)
 
     def reset_index(self):
         """Reset index of source and receivers.
@@ -771,8 +780,8 @@ In this case, please set dist_in_data=True and read again.""")
         :type weight: bool, optional
         :param fname: Path to output file, defaults to None
         :type fname: str, optional
-        :return: _description_
-        :rtype: _type_
+        :return: matplotlib figure
+        :rtype: matplotlib.figure.Figure
         """
         from .vis import plot_srcrec
         return plot_srcrec(self, weight=weight, fname=fname)

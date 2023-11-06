@@ -6,6 +6,15 @@ from .utils import asind, acosd
 
 
 class ATTData():
+    """Read data from HDF5 or ASCII file
+
+    :param fname: Path to data file
+    :type fname: str
+    :param fname_params: Path to input parameter file
+    :type fname_params: str
+    :param fname_grid: Path to grid file
+    :type fname_grid: str
+    """
     def __init__(self, fname:str,
                  fname_params:str,
                  fname_grid='OUTPUT_FILES/out_data_grid.h5'):
@@ -37,6 +46,23 @@ class ATTData():
                 fname_grid='OUTPUT_FILES/out_data_grid.h5',
                 group_name='model', dataset_name=None,
                 format='hdf5'):
+        """Read data from HDF5 or ASCII file
+
+        :param fname: Path to data file
+        :type fname: str
+        :param fname_params: Path to input parameter file
+        :type fname_params: str
+        :param fname_grid: Path to grid file
+        :type fname_grid: str
+        :param group_name: Name of the group in the HDF5 file
+        :type group_name: str
+        :param dataset_name: Name of the dataset in the HDF5 file
+        :type dataset_name: str
+        :param format: Format of the data file, defaults to 'hdf5'
+        :type format: str, optional
+        :return: An instance of ATTData
+        :rtype: ATTData
+        """
         attdata = cls(fname, fname_params, fname_grid)
         attdata.format = format
         # attdata.group_name = group_name
