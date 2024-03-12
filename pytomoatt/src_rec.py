@@ -25,6 +25,8 @@ class SrcRec:
         self.src_only = src_only
         self.src_points = None
         self.rec_points = None
+        self.sources = None
+        self.receivers = None
         self.fnames = [fname]
         self.log = SetupLog()
 
@@ -288,6 +290,13 @@ In this case, please set dist_in_data=True and read again."""
                 )
                 # drop network name column
                 sr.rec_points.drop("netname", axis=1, inplace=True)
+                # define src and rec list
+                sr.sources = sr.src_points[
+                    ["event_id", "evla", "evlo", "evdp", "weight"]
+                ]
+                sr.receivers = sr.rec_points[
+                    ["staname", "stla", "stlo", "stel", "weight"]
+                ].drop_duplicates()
 
         return sr
 
@@ -819,13 +828,14 @@ In this case, please set dist_in_data=True and read again."""
             self.src_points["evla"], self.src_points["evlo"], scale
         )
         if rec_weight:
-            # self.rec_points['weight'] = self._calc_weights(
-            #     self.src_points['stla'],
-            #     self.src_points['stlo'],
-            #     scale
-            # )
-            pass  # TODO: add weights for receivers
-
+            weights = self._calc_weights(
+                self.receivers['stla'],
+                self.receivers['stlo'],
+                scale
+            )
+            # apply weights to rec_points
+            for staname, weight in zip(self.receivers['staname'], weights):
+                self.rec_points.loc[self.rec_points['staname'] == staname, 'weight'] = weight
     #
     # This function is comment out temprarly because it includes verified bug and not modified.
     #
@@ -901,7 +911,7 @@ In this case, please set dist_in_data=True and read again."""
     #    # number of unique stations after merging
     #    print('number of unique stations after merging: ', self.rec_points['staname'].nunique())
 
-    def add_noise(self, mean_in_sec=0.0, range_in_sec=0.1, shape="gaussian"):
+    def add_noise(self, range_in_sec=0.1, mean_in_sec=0.0, shape="gaussian"):
         """Add random noise on travel time
 
         :param mean_in_sec: Mean of the noise in sec, defaults to 0.0
@@ -930,10 +940,7 @@ In this case, please set dist_in_data=True and read again."""
 
         :param fname: Path to output txt file of receivers
         """
-        recs = self.rec_points[
-            ["staname", "stla", "stlo", "stel", "weight"]
-        ].drop_duplicates()
-        recs.to_csv(fname, sep=" ", header=False, index=False)
+        self.receivers.to_csv(fname, sep=" ", header=False, index=False)
 
     def write_sources(self, fname: str):
         """
@@ -941,8 +948,7 @@ In this case, please set dist_in_data=True and read again."""
 
         :param fname: Path to output txt file of sources
         """
-        srcs = self.src_points[["event_id", "evla", "evlo", "evdp", "weight"]]
-        srcs.to_csv(fname, sep=" ", header=False, index=False)
+        self.sources.to_csv(fname, sep=" ", header=False, index=False)
 
     @classmethod
     def from_seispy(cls, rf_path: str):
