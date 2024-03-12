@@ -39,7 +39,7 @@ jobs:
         password: ${{ secrets.PYPI_API_TOKEN }}
       
   Build_docs:
-    uses: MIGG-NTU/PyTomoATT/.github/workflows/build-docs.yml@ref
+    uses: MIGG-NTU/PyTomoATT/.github/workflows/build-docs.yml@devel
     with:
       config-path: .github/workflows/build-docs.yml
     secrets: inherit
