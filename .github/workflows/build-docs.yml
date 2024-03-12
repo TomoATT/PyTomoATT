@@ -11,10 +11,6 @@ on:
       config-path:
         required: true
         type: string
-    secrets:
-      token:
-        required: true
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
