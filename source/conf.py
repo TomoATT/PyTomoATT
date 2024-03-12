@@ -26,9 +26,6 @@ extensions = ['sphinx.ext.githubpages',
               "sphinx.ext.mathjax",
               "sphinx.ext.todo",
               "sphinx.ext.viewcode",
-            #   "sphinxcontrib.icon",
-            #   "sphinx_gallery.gen_gallery",
-            #   'sphinxcontrib.bibtex',
 ]
 
 
