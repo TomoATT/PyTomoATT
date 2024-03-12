@@ -39,8 +39,6 @@ jobs:
         password: ${{ secrets.PYPI_API_TOKEN }}
       
   Build_docs:
-    uses: ./.github/workflows/build-docs.yml@devel
-    with:
-      config-path: ./.github/workflows/build-docs.yml
+    uses: ./.github/workflows/build-docs.yml
     secrets: inherit
 
