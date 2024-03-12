@@ -291,13 +291,12 @@ In this case, please set dist_in_data=True and read again."""
                 # drop network name column
                 sr.rec_points.drop("netname", axis=1, inplace=True)
                 # define src and rec list
-                sr.sources = sr.src_points[
-                    ["event_id", "evla", "evlo", "evdp", "weight"]
-                ]
-                sr.receivers = sr.rec_points[
-                    ["staname", "stla", "stlo", "stel", "weight"]
-                ].drop_duplicates()
-
+            sr.sources = sr.src_points[
+                ["event_id", "evla", "evlo", "evdp", "weight"]
+            ]
+            sr.receivers = sr.rec_points[
+                ["staname", "stla", "stlo", "stel", "weight"]
+            ].drop_duplicates()
         return sr
 
     def write(self, fname="src_rec_file"):
