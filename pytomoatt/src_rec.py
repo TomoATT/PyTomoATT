@@ -455,6 +455,21 @@ In this case, please set dist_in_data=True and read again.""")
         self.log.SrcReclog.info('src_points after selecting: {}'.format(self.src_points.shape))
         self.log.SrcReclog.info('rec_points after selecting: {}'.format(self.rec_points.shape))
 
+    def select_depth(self, dep_min_max):
+        """Select sources in a range of depth
+
+        :param dep_min_max: limit of depth, ``[dep_min, dep_max]``
+        :type dep_min_max: sequence
+        """
+        self.log.SrcReclog.info('src_points before selecting: {}'.format(self.src_points.shape))
+        self.src_points = self.src_points[
+            (self.src_points['evdp'] >= dep_min_max[0]) &
+            (self.src_points['evdp'] <= dep_min_max[1])
+        ]
+        self.remove_rec_by_new_src()
+        self.update_num_rec()
+        self.log.SrcReclog.info('src_points after selecting: {}'.format(self.src_points.shape))
+
     def calc_distance(self):
         """Calculate epicentral distance
         """

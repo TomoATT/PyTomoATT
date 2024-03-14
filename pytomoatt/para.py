@@ -1,4 +1,5 @@
 import yaml
+from .utils import init_axis
 
 
 class ATTPara:
@@ -13,6 +14,15 @@ class ATTPara:
         with open(fname) as f:
             file_data = f.read()
         self.input_params = yaml.load(file_data, Loader=yaml.Loader)
+
+    def init_axis(self):
+        dep, lat, lon, dd, dt, dp = init_axis(
+            self.input_params['domain']['min_max_dep'],
+            self.input_params['domain']['min_max_lat'],
+            self.input_params['domain']['min_max_lon'],
+            self.input_params['domain']['n_rtp'],
+        )
+        return dep, lat, lon, dd, dt, dp
 
     def write(self, fname=None):
         """write
