@@ -26,7 +26,14 @@ class TestSrcRec:
         sr.add_noise()
         sr.add_noise(shape='uniform')
 
+    def test_subcase_05(self):
+        sr = SrcRec.read(self.fname)
+        sr.select_depth([0, 10])
+        assert sr.src_points.shape[0] == 1413 and sr.rec_points.shape[0] == 11226
+
+
 if __name__ == '__main__':
     tsr = TestSrcRec()
-    tsr.test_subcase_03()
+    tsr.test_subcase_05()
+
 
