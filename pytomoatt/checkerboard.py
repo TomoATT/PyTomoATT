@@ -1,6 +1,7 @@
 import h5py
 import numpy as np
 from .utils import init_axis, sind, cosd
+import copy
 
 
 class Checker():
@@ -74,7 +75,7 @@ class Checker():
             ntaper_right = 0
         x_pert = np.zeros_like(self.pp)
         x_pert[ntaper_left:self.pp.size-ntaper_right] = \
-            np.sin(period_x*2*np.pi*np.arange(self.pp.size-(ntaper_left+ntaper_right))/ \
+            np.sin(period_x*np.pi*np.arange(self.pp.size-(ntaper_left+ntaper_right))/ \
             (self.pp.size-(ntaper_left+ntaper_right)))
 
         if lim_y is not None:
@@ -84,7 +85,7 @@ class Checker():
             ntaper_right = 0
         y_pert = np.zeros_like(self.tt)
         y_pert[ntaper_left:self.tt.size-ntaper_right] = \
-            np.sin(period_y*2*np.pi*np.arange(self.tt.size-(ntaper_left+ntaper_right))/ \
+            np.sin(period_y*np.pi*np.arange(self.tt.size-(ntaper_left+ntaper_right))/ \
             (self.tt.size-(ntaper_left+ntaper_right)))
 
         if lim_z is not None:
@@ -94,7 +95,7 @@ class Checker():
             ntaper_right = 0
         z_pert = np.zeros_like(self.dd)
         z_pert[ntaper_right:self.dd.size-ntaper_left] = \
-            np.sin(period_z*2*np.pi*np.arange(self.dd.size-(ntaper_left+ntaper_right))/ \
+            np.sin(period_z*np.pi*np.arange(self.dd.size-(ntaper_left+ntaper_right))/ \
             (self.dd.size-(ntaper_left+ntaper_right)))
 
         xx, yy, zz= np.meshgrid(z_pert, y_pert, x_pert, indexing='ij')
@@ -107,6 +108,14 @@ class Checker():
         self.phi[np.where(self.perturbation<0)] = 45.
         self.xi = self.epsilon*cosd(2*self.phi)
         self.eta = self.epsilon*sind(2*self.phi)
+
+    def copy(self):
+        """Create a deep copy of the Checker object
+
+        :return: A copy of the Checker object
+        :rtype: Checker
+        """
+        return copy.deepcopy(self)
 
     def write(self, fname: str):
         """Write new model to h5 file

@@ -34,6 +34,8 @@ class TestSrcRec:
 
 if __name__ == '__main__':
     tsr = TestSrcRec()
+    tsr.test_subcase_01()
+    tsr.test_subcase_02()
     tsr.test_subcase_05()
 
 
