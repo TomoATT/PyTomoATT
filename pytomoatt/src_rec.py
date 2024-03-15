@@ -376,10 +376,10 @@ In this case, please set dist_in_data=True and read again."""
 
     def update(self):
         """
-        Update src_points and rec_points with procedures:
+        Update ``SrcRec.src_points`` and ``SrcRec.rec_points`` with procedures:
 
-        1. remove rec_points by new src_points
-        2. remove src_points by new rec_points
+        1. remove receivers by new sources
+        2. remove sources by new receivers
         3. update num_rec
         4. reset index
         5. update unique sources and receivers
@@ -518,10 +518,10 @@ In this case, please set dist_in_data=True and read again."""
             "rec_points before selecting: {}".format(self.rec_points.shape)
         )
         self.rec_points = self.rec_points[self.rec_points["phase"].isin(phase_list)]
+        self.update()
         self.log.SrcReclog.info(
             "rec_points after selecting: {}".format(self.rec_points.shape)
         )
-        self.update()
 
     def select_by_datetime(self, time_range):
         """
@@ -774,9 +774,11 @@ In this case, please set dist_in_data=True and read again."""
     def geo_weighting(self, scale=0.5, rec_weight=False):
         """Calculating geographical weights for sources
 
-        :param scale: Scale of reference distance parameter See equation 22 in Ruan et al., (2019),
-                      The reference distance is given by ``scale``* dis_average, defaults to 0.5
+        :param scale: Scale of reference distance parameter. 
+                      See equation 22 in Ruan et al., (2019). The reference distance is given by ``scale* dis_average``, defaults to 0.5
         :type scale: float, optional
+        :param rec_weight: Whether to calculate weights for receivers, defaults to False
+        :type rec_weight: bool, optional
         """
 
         self.src_points["weight"] = self._calc_weights(
