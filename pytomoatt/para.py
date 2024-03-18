@@ -11,7 +11,7 @@ class ATTPara:
         :type fname: str
         """
         self.fname = fname
-        with open(fname) as f:
+        with open(fname, encoding='utf-8') as f:
             file_data = f.read()
         self.input_params = yaml.load(file_data, Loader=yaml.Loader)
 
