@@ -3,7 +3,7 @@ import tqdm
 import pandas as pd
 from .distaz import DistAZ
 from .setuplog import SetupLog
-from .utils import WGS84_to_cartesian, define_rec_cols
+from .utils import define_rec_cols, setup_rec_points_dd, get_rec_points_types
 from sklearn.metrics.pairwise import haversine_distances
 import copy
 
@@ -24,6 +24,8 @@ class SrcRec:
         self.src_only = src_only
         self.src_points = None
         self.rec_points = None
+        self.rec_points_cr = None
+        self.rec_points_cs = None
         self.sources = None
         self.receivers = None
         self.fnames = [fname]
@@ -128,12 +130,16 @@ class SrcRec:
         """
         sr = cls(fname=fname, **kwargs)
         alldf = pd.read_table(
-            fname, sep="\s+|\t", engine="python", header=None, comment="#"
+            fname, sep="\s+", header=None, comment="#"
         )
 
         last_col_src = 12
+        dd_col = 11
         # this is a source line if the last column is not NaN
-        sr.src_points = alldf[pd.notna(alldf[last_col_src])]
+        # sr.src_points = alldf[pd.notna(alldf[last_col_src])]
+        sr.src_points = alldf[~(alldf[dd_col].astype(str).str.contains("cs")| \
+                                alldf[dd_col].astype(str).str.contains("cr")| \
+                                pd.isna(alldf[last_col_src]))]
         # add weight column if not included
         if sr.src_points.shape[1] == last_col_src + 1:
             # add another column for weight
@@ -202,7 +208,8 @@ class SrcRec:
 
             # extract the rows if the last_col is not NaN and the 12th column is NaN
             sr.rec_points = alldf[
-                (alldf[last_col].notna()) & (alldf[last_col_src].isna())
+                (alldf[last_col].notna()) & \
+                (alldf[last_col_src].isna())
             ].reset_index(drop=True)
 
             # add weight column if not included
@@ -224,17 +231,44 @@ In this case, please set dist_in_data=True and read again."""
             # define column names
             sr.rec_points.columns = cols
 
-            # change type of rec_index to int
-            sr.rec_points["rec_index"] = sr.rec_points["rec_index"].astype(int)
+            sr.rec_points = sr.rec_points.astype(get_rec_points_types(dist_in_data))
             
             if name_net_and_sta:
-                # concatenate network and station name with "_"
+                # concatenate network and station name with "."
                 sr.rec_points["staname"] = (
-                    sr.rec_points["netname"] + "_" + sr.rec_points["staname"]
+                    sr.rec_points["netname"] + "." + sr.rec_points["staname"]
                 )
                 # drop network name column
                 sr.rec_points.drop("netname", axis=1, inplace=True)
                 # define src and rec list
+
+            # read common receiver data
+            last_col = 12
+            sr.rec_points_cr = alldf[
+                alldf[11].astype(str).str.contains("cr")
+            ].reset_index(drop=True)
+            if not sr.rec_points_cr.empty:
+                if sr.rec_points_cr.shape[1] == last_col + 1:
+                    # add another column for weight
+                    sr.rec_points_cr.loc[:, last_col + 1] = 1.0
+                # set column names and types
+                cols, data_type = setup_rec_points_dd(type='cr')
+                sr.rec_points_cr.columns = cols
+                sr.rec_points_cr = sr.rec_points_cr.astype(data_type)
+
+            # read common source data
+            sr.rec_points_cs = alldf[
+                alldf[11].astype(str).str.contains("cs")
+            ].reset_index(drop=True)
+            if not sr.rec_points_cs.empty:
+                if sr.rec_points_cs.shape[1] == last_col + 1:
+                    # add another column for weight
+                    sr.rec_points_cs.loc[:, last_col + 1] = 1.0
+                # set column names and types
+                cols, data_type = setup_rec_points_dd(type='cs')
+                sr.rec_points_cs.columns = cols
+                sr.rec_points_cs = sr.rec_points_cs.astype(data_type)
+
             sr.update_unique_src_rec()
         return sr
 
@@ -281,6 +315,50 @@ In this case, please set dist_in_data=True and read again."""
                             rec["weight"],
                         )
                     )
+                if not self.rec_points_cs.empty:
+                    rec_data = self.rec_points_cs[self.rec_points_cs["src_index"] == idx]
+                    for _, rec in rec_data.iterrows():
+                        f.write(
+                            "   {:d} {:d} {} {:6.4f} {:6.4f} {:6.4f} "
+                            " {:d} {} {:6.4f} {:6.4f} {:6.4f} {} {:.4f} {:6.4f}\n".format(
+                                idx,
+                                rec["rec_index1"],
+                                rec["staname1"],
+                                rec["stla1"],
+                                rec["stlo1"],
+                                rec["stel1"],
+                                rec["rec_index2"],
+                                rec['staname2'],
+                                rec['stla2'],
+                                rec['stlo2'],
+                                rec['stel2'],
+                                rec["phase"],
+                                rec["tt"],
+                                rec["weight"],
+                            )
+                        )
+                if not self.rec_points_cr.empty:
+                    rec_data = self.rec_points_cr[self.rec_points_cr["src_index"] == idx]
+                    for _, rec in rec_data.iterrows():
+                        f.write(
+                            "   {:d} {:d} {} {:6.4f} {:6.4f} {:6.4f} "
+                            " {:d} {} {:6.4f} {:6.4f} {:6.4f} {} {:.4f} {:6.4f}\n".format(
+                                idx,
+                                rec["rec_index"],
+                                rec["staname"],
+                                rec["stla"],
+                                rec["stlo"],
+                                rec["stel"],
+                                rec["src_index2"],
+                                rec['event_id2'],
+                                rec['evla2'],
+                                rec['evlo2'],
+                                rec['evdp2'],
+                                rec["phase"],
+                                rec["tt"],
+                                rec["weight"],
+                            )
+                        )
 
     def copy(self):
         """Return a copy of SrcRec object
@@ -291,25 +369,84 @@ In this case, please set dist_in_data=True and read again."""
         return copy.deepcopy(self)
     
     def update_unique_src_rec(self):
-        self.sources = self.src_points[
-            ["event_id", "evla", "evlo", "evdp", "weight"]
-        ]
-        self.receivers = self.rec_points[
-            ["staname", "stla", "stlo", "stel", "weight"]
-        ].drop_duplicates()
+        """
+        Update unique sources and receivers
+
+        The unique sources and receivers are stored 
+        in ``SrcRec.sources`` and ``SrcRec.receivers`` respectively.
+        """
+        # get sources
+        src_col = ["event_id", "evla", "evlo", "evdp"]
+        sources = self.src_points[src_col].values
+        if not self.rec_points_cr.empty:
+            sources= np.vstack(
+                [sources, self.rec_points_cr[
+                ["event_id2", "evla2", "evlo2", "evdp2"]
+                ].values])
+        self.sources = pd.DataFrame(
+            sources, columns=src_col
+        ).drop_duplicates(ignore_index=True)
+
+        # get receivers
+        rec_col = ["staname", "stla", "stlo", "stel"]
+        receivers = self.rec_points[rec_col].values
+        if not self.rec_points_cs.empty:
+            receivers = np.vstack(
+                [receivers, self.rec_points_cs[
+                ["staname1", "stla1", "stlo1", "stel1"]
+            ].values])
+            receivers = np.vstack(
+                [receivers, self.rec_points_cs[
+                ["staname2", "stla2", "stlo2", "stel2"]
+            ].values])
+        if not self.rec_points_cr.empty:
+            receivers = np.vstack(
+                [receivers, self.rec_points_cr[
+                ["staname", "stla", "stlo", "stel"]
+            ].values])
+        self.receivers = pd.DataFrame(
+            receivers, columns=rec_col
+        ).drop_duplicates(ignore_index=True)
 
     def reset_index(self):
         """Reset index of source and receivers."""
+        # self.src_points.index = np.arange(len(self.src_points))
+        # use index in self.sources when self.src_points['event_id'] == self.sources['event_id']
+        new_index = self.src_points["event_id"].map(
+            dict(zip(self.sources["event_id"], self.sources.index))
+        )
+
         # reset src_index to be 0, 1, 2, ... for both src_points and rec_points
         self.rec_points["src_index"] = self.rec_points["src_index"].map(
-            dict(zip(self.src_points.index, np.arange(len(self.src_points))))
+            dict(zip(self.src_points.index, new_index))
         )
-        self.src_points.index = np.arange(len(self.src_points))
+        self.rec_points.reset_index(drop=True, inplace=True)
+
+        if not self.rec_points_cs.empty:
+            self.rec_points_cs["src_index"] = self.rec_points_cs["src_index"].map(
+                dict(zip(self.src_points.index, new_index))
+            )
+            self.rec_points_cs.reset_index(drop=True, inplace=True)
+        
+        if not self.rec_points_cr.empty:
+            self.rec_points_cr["src_index"] = self.rec_points_cr["src_index"].map(
+                dict(zip(self.src_points.index, new_index))
+            )
+            # update event_id2
+            self.rec_points_cr["src_index2"] = self.rec_points_cr["event_id2"].map(
+                dict(zip(self.src_points["event_id"], new_index))
+            )
+            self.rec_points_cr.reset_index(drop=True, inplace=True)
+
+        self.src_points["src_index"] = new_index
         self.src_points.index.name = "src_index"
 
         # reset rec_index to be 0, 1, 2, ... for rec_points
         self.rec_points["rec_index"] = self.rec_points.groupby("src_index").cumcount()
-        # sr.rec_points['rec_index'] = sr.rec_points['rec_index'].astype(int)
+        if not self.rec_points_cs.empty:
+            self.rec_points_cs["rec_index1"] = self.rec_points_cs.groupby("src_index").cumcount()
+        if not self.rec_points_cr.empty:
+            self.rec_points_cr["rec_index"] = self.rec_points_cr.groupby("src_index").cumcount()
 
     def append(self, sr):
         """
@@ -361,12 +498,34 @@ In this case, please set dist_in_data=True and read again."""
         self.rec_points = self.rec_points[
             self.rec_points["src_index"].isin(self.src_points.index)
         ]
+        if not self.rec_points_cs.empty:
+            self.rec_points_cs = self.rec_points_cs[
+                self.rec_points_cs["src_index"].isin(self.src_points.index)
+            ]
+        if not self.rec_points_cr.empty:
+            self.rec_points_cr = self.rec_points_cr[
+                self.rec_points_cr["src_index"].isin(self.src_points.index)
+            ]
+            self.rec_points_cr = self.rec_points_cr[
+                self.rec_points_cr['event_id2'].isin(self.src_points['event_id'])
+            ]
           
     def remove_src_by_new_rec(self):
         """remove src_points by new receivers"""
         self.src_points = self.src_points[
             self.src_points.index.isin(self.rec_points["src_index"])
         ]
+        if not self.rec_points_cr.empty:
+            self.src_points = pd.concat(
+                [self.src_points, self.src_points[
+                self.src_points.index.isin(self.rec_points_cr["src_index"])
+            ]])
+        if not self.rec_points_cs.empty:
+            self.src_points = pd.concat( 
+                [self.src_points, self.src_points[
+                self.src_points.index.isin(self.rec_points_cs["src_index"])
+            ]])
+        self.src_points = self.src_points.drop_duplicates()
 
     def update_num_rec(self):
         """
@@ -384,11 +543,11 @@ In this case, please set dist_in_data=True and read again."""
         4. reset index
         5. update unique sources and receivers
         """
+        self.update_unique_src_rec()
         self.remove_rec_by_new_src()
         self.remove_src_by_new_rec()
         self.update_num_rec()
         self.reset_index()
-        self.update_unique_src_rec()
         # sort by src_index
         self.src_points.sort_values(by=["src_index"], inplace=True)
         self.rec_points.sort_values(by=["src_index", "rec_index"], inplace=True)

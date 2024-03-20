@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.interpolate import griddata
+import pandas as pd
 
 def sind(deg):
     rad = np.radians(deg)
@@ -103,17 +104,16 @@ def init_axis(min_max_dep, min_max_lat, min_max_lon, n_rtp):
 def to_vtk(fname:str, model:dict, dep, lat, lon):
     """convert model initial model VTK file
 
-    :param fname: _description_
+    :param fname: Path to output VTK file
     :type fname: str
-    :param model: _description_
+    :param model: Model data
     :type model: dict
-    :param dep: _description_
-    :type dep: _type_
-    :param lat: _description_
-    :type lat: _type_
-    :param lon: _description_
-    :type lon: _type_
-    :raises ModuleNotFoundError: _description_
+    :param dep: Depth axis
+    :type dep: numpy.ndarray
+    :param lat: Latitude axis
+    :type lat: numpy.ndarray
+    :param lon: Longitude axis
+    :type lon: numpy.ndarray
     """
     try:
         import pyvista as pv
@@ -208,3 +208,90 @@ def define_rec_cols(dist_in_data, name_net_and_sta):
                 "weight",
             ]
     return columns, last_col
+
+def get_rec_points_types(dist):
+    common_type = {
+        "src_index": int,
+        "rec_index": int,
+        "staname": str,
+        "stla": float,
+        "stlo": float,
+        "stel": float,
+        "phase": str,
+        "tt": float,
+        "weight": float,
+    }
+    if dist:
+        common_type["dist_deg"] = float
+    return common_type
+
+def setup_rec_points_dd(type='cs'):
+    if type == 'cs':       
+        columns = [
+            "src_index",
+            "rec_index1",
+            "staname1",
+            "stla1",
+            "stlo1",
+            "stel1",
+            "rec_index2",
+            "staname2",
+            "stla2",
+            "stlo2",
+            "stel2",
+            "phase",
+            "tt",
+            "weight"
+        ]
+        data_type = {
+            "src_index": int,
+            "rec_index1": int,
+            "staname1": str,
+            "stla1": float,
+            "stlo1": float,
+            "stel1": float,
+            "rec_index2": int,
+            "staname2": str,
+            "stla2": float,
+            "stlo2": float,
+            "stel2": float,
+            "phase": str,
+            "tt": float,
+            "weight": float
+        }
+    elif type == 'cr':
+        columns = [
+            "src_index",
+            "rec_index",
+            "staname",
+            "stla",
+            "stlo",
+            "stel",
+            "src_index2",
+            "event_id2",
+            "evla2",
+            "evlo2",
+            "evdp2",
+            "phase",
+            "tt",
+            "weight"
+        ]
+        data_type = {
+            "src_index": int,
+            "rec_index": int,
+            "staname": str,
+            "stla": float,
+            "stlo": float,
+            "stel": float,
+            "src_index2": int,
+            "event_id2": str,
+            "evla2": float,
+            "evlo2": float,
+            "evdp2": float,
+            "phase": str,
+            "tt": float,
+            "weight": float
+        }
+    else:
+        raise ValueError('type should be either "cs" or "cr"')
+    return columns, data_type

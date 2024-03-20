@@ -77,6 +77,9 @@ class ATTModel():
 
     def to_xarray(self):
         """Convert to xarray
+
+        :return: xarray dataset
+        :rtype: xarray.Dataset
         """
         data_dict = {}
         data_dict['vel'] = (["r", "t", "p"], self.vel)
