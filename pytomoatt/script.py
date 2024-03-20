@@ -105,14 +105,17 @@ The pta commands include:
     def create_checkerboard(self):
         parser = argparse.ArgumentParser(description='Add perturbations on a model')
         parser.add_argument('input_params', help='The parameter file of TomoATT, The section \"domain\" will be read.')
+        parser.add_argument('-a', help='nx, ny and nz of anisotropic anomalies along longitude, '
+                                        'latitude and depth, defaults to the same as -n', 
+                            metavar='nx/ny/nz', default=None)
         parser.add_argument('-i', help='Path to input model file', required=True, metavar='fname')
-        parser.add_argument('-n', help='nx, ny and nz pairs of anomalies along X, Y and Z', metavar='nx/ny/nz', required=True)
+        parser.add_argument('-n', help='nx, ny and nz of velocity anomalies along longitude, latitude and depth', metavar='nx/ny/nz', required=True)
+        parser.add_argument('-o', help='Path to output perturbed model', default=None, metavar='fname')
         parser.add_argument('-p', help='Amplitude of perturbations for velocity (pert_vel) and anisotropy (pert_ani)', 
                             metavar='pert_vel/pert_ani', default='0.08/0.04')
-        parser.add_argument('-o', help='Path to output perturbed model', default=None, metavar='fname')
-        parser.add_argument('-x', help='Upper and low bound for X direction', default=None, metavar='xmin/xmax')
-        parser.add_argument('-y', help='Upper and low bound for Y direction', default=None, metavar='ymin/ymax')
-        parser.add_argument('-z', help='Upper and low bound for Z direction', default=None, metavar='zmin/zmax')
+        parser.add_argument('-x', help='Upper and low bound for longitude direction', default=None, metavar='xmin/xmax')
+        parser.add_argument('-y', help='Upper and low bound for latitude direction', default=None, metavar='ymin/ymax')
+        parser.add_argument('-z', help='Upper and low bound for depth direction', default=None, metavar='zmin/zmax')
         args = parser.parse_args(sys.argv[2:])
         para = ATTPara(args.input_params)
         cb = Checker(args.i)
@@ -137,6 +140,14 @@ The pta commands include:
         else:
             lim_z = args.z
         cb.checkerboard(*n_period, *pert, lim_x=lim_x, lim_y=lim_y, lim_z=lim_z)
+        if args.a is not None:
+            n_ani = [float(v) for v in args.a.split('/')]
+            cba = cb.copy()
+            cba.checkerboard(*n_ani, *pert, lim_x=lim_x, lim_y=lim_y, lim_z=lim_z)
+            cb.epsilon = cba.epsilon
+            cb.phi = cba.phi
+            cb.xi = cba.xi
+            cb.eta = cba.eta
         cb.write(args.o)
         
     def model2vtk(self):

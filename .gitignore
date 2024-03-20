@@ -131,3 +131,5 @@ dmypy.json
 .DS_store
 crust_model/
 *.xmf
+
+test_src_rec_eg

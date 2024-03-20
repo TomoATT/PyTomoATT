@@ -17,6 +17,7 @@ class ATTModel():
         :type para_fname: str, optional
         """
         self.para_fname = para_fname
+        self.d_rtp = np.zeros(3)
         self.read_param()
         self.eta = np.zeros(self.n_rtp)
         self.xi = np.zeros(self.n_rtp)
@@ -31,7 +32,8 @@ class ATTModel():
         self.min_max_dep = para.input_params['domain']['min_max_dep']
         self.min_max_lat = para.input_params['domain']['min_max_lat']
         self.min_max_lon = para.input_params['domain']['min_max_lon']
-        self.depths, self.latitudes, self.longitudes, _, _, _ = init_axis(
+        self.depths, self.latitudes, self.longitudes, \
+        self.d_rtp[0], self.d_rtp[1], self.d_rtp[2] = init_axis(
             self.min_max_dep, self.min_max_lat, self.min_max_lon, self.n_rtp
         )
         self.radius = 6371. - self.depths
@@ -131,9 +133,14 @@ class ATTModel():
     def smooth(self, sigma=5.0):
         """Gaussian smooth the 3D velocity model
 
-        :param sigma: Standard division of gaussian kernel, defaults to 5
-        :type sigma: float, optional
+        :param sigma: Standard division of gaussian kernel in km, defaults to 10
+        :type sigma: scalar or sequence of scalars , optional
         """
+        if isinstance(sigma, (int, float)):
+            sigma_all = np.ones(3)*sigma/self.d_rtp/2/np.pi
+        elif len(sigma) == 3:
+            sigma_all = np.array(sigma)/self.d_rtp/2/np.pi
+        sigma_all[0:2] /= 111.19
         self.vel = gaussian_filter(self.vel, sigma)
 
     def calc_dv_avg(self):

@@ -21,7 +21,7 @@ class TestATTModel():
             para.input_params['domain']['min_max_lon'],
             para.input_params['domain']['n_rtp']
         )
-        cm.checkerboard(1,1,1)
+        cm.checkerboard(2,2,2)
 
     def test_checkerboard02(self):
         para = ATTPara(self.para_fname)
@@ -33,7 +33,7 @@ class TestATTModel():
             para.input_params['domain']['n_rtp']
         )
         cm.checkerboard(
-            1.5,1.5,1.5,
+            3,3,3,
             lim_x=[-1, 1],
             lim_y=[-0.5, 0.5],
             lim_z=[10, 120]

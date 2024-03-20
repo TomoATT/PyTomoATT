@@ -3,8 +3,7 @@ import tqdm
 import pandas as pd
 from .distaz import DistAZ
 from .setuplog import SetupLog
-from .utils import WGS84_to_cartesian
-from scipy.spatial import distance
+from .utils import WGS84_to_cartesian, define_rec_cols
 from sklearn.metrics.pairwise import haversine_distances
 import copy
 
@@ -199,13 +198,7 @@ class SrcRec:
         # read receiver data if not src_only
         if not sr.src_only:
             # number of columns is 8 if distance is not included
-            if not dist_in_data:
-                last_col = 7
-            else:
-                last_col = 8
-
-            if name_net_and_sta:
-                last_col += 1
+            cols, last_col = define_rec_cols(dist_in_data, name_net_and_sta)
 
             # extract the rows if the last_col is not NaN and the 12th column is NaN
             sr.rec_points = alldf[
@@ -228,62 +221,13 @@ In this case, please set dist_in_data=True and read again."""
             # extract only the first part of columns (cut unnecessary columns)
             sr.rec_points = sr.rec_points.loc[:, : last_col + 1]
 
-            if name_net_and_sta == False:
-                if not dist_in_data:
-                    sr.rec_points.columns = [
-                        "src_index",
-                        "rec_index",
-                        "staname",
-                        "stla",
-                        "stlo",
-                        "stel",
-                        "phase",
-                        "tt",
-                        "weight",
-                    ]
-                else:
-                    sr.rec_points.columns = [
-                        "src_index",
-                        "rec_index",
-                        "staname",
-                        "stla",
-                        "stlo",
-                        "stel",
-                        "phase",
-                        "dist_deg",
-                        "tt",
-                        "weight",
-                    ]
-            else:
-                if not dist_in_data:
-                    sr.rec_points.columns = [
-                        "src_index",
-                        "rec_index",
-                        "netname",
-                        "staname",
-                        "stla",
-                        "stlo",
-                        "stel",
-                        "phase",
-                        "tt",
-                        "weight",
-                    ]
-                else:
-                    sr.rec_points.columns = [
-                        "src_index",
-                        "rec_index",
-                        "netname",
-                        "staname",
-                        "stla",
-                        "stlo",
-                        "stel",
-                        "phase",
-                        "dist_deg",
-                        "tt",
-                        "weight",
-                    ]
-                # change type of rec_index to int
-                sr.rec_points["rec_index"] = sr.rec_points["rec_index"].astype(int)
+            # define column names
+            sr.rec_points.columns = cols
+
+            # change type of rec_index to int
+            sr.rec_points["rec_index"] = sr.rec_points["rec_index"].astype(int)
+            
+            if name_net_and_sta:
                 # concatenate network and station name with "_"
                 sr.rec_points["staname"] = (
                     sr.rec_points["netname"] + "_" + sr.rec_points["staname"]
@@ -291,12 +235,7 @@ In this case, please set dist_in_data=True and read again."""
                 # drop network name column
                 sr.rec_points.drop("netname", axis=1, inplace=True)
                 # define src and rec list
-            sr.sources = sr.src_points[
-                ["event_id", "evla", "evlo", "evdp", "weight"]
-            ]
-            sr.receivers = sr.rec_points[
-                ["staname", "stla", "stlo", "stel", "weight"]
-            ].drop_duplicates()
+            sr.update_unique_src_rec()
         return sr
 
     def write(self, fname="src_rec_file"):
@@ -350,6 +289,14 @@ In this case, please set dist_in_data=True and read again."""
         :rtype: SrcRec
         """
         return copy.deepcopy(self)
+    
+    def update_unique_src_rec(self):
+        self.sources = self.src_points[
+            ["event_id", "evla", "evlo", "evdp", "weight"]
+        ]
+        self.receivers = self.rec_points[
+            ["staname", "stla", "stlo", "stel", "weight"]
+        ].drop_duplicates()
 
     def reset_index(self):
         """Reset index of source and receivers."""
@@ -407,22 +354,14 @@ In this case, please set dist_in_data=True and read again."""
         # store fnames
         self.fnames.extend(sr.fnames)
 
-    def remove_rec_by_new_src(self, verbose=True):
+    def remove_rec_by_new_src(self,):
         """
         remove rec_points by new src_points
         """
-        if verbose:
-            self.log.SrcReclog.info(
-                "rec_points before removing: {}".format(self.rec_points.shape)
-            )
         self.rec_points = self.rec_points[
             self.rec_points["src_index"].isin(self.src_points.index)
         ]
-        if verbose:
-            self.log.SrcReclog.info(
-                "rec_points after removing: {}".format(self.rec_points.shape)
-            )
-
+          
     def remove_src_by_new_rec(self):
         """remove src_points by new receivers"""
         self.src_points = self.src_points[
@@ -435,13 +374,32 @@ In this case, please set dist_in_data=True and read again."""
         """
         self.src_points["num_rec"] = self.rec_points.groupby("src_index").size()
 
+    def update(self):
+        """
+        Update ``SrcRec.src_points`` and ``SrcRec.rec_points`` with procedures:
+
+        1. remove receivers by new sources
+        2. remove sources by new receivers
+        3. update num_rec
+        4. reset index
+        5. update unique sources and receivers
+        """
+        self.remove_rec_by_new_src()
+        self.remove_src_by_new_rec()
+        self.update_num_rec()
+        self.reset_index()
+        self.update_unique_src_rec()
+        # sort by src_index
+        self.src_points.sort_values(by=["src_index"], inplace=True)
+        self.rec_points.sort_values(by=["src_index", "rec_index"], inplace=True)
+
     def erase_src_with_no_rec(self):
         """
         erase src_points with no rec_points
         """
-        print("src_points before removing: ", self.src_points.shape)
+        self.log.SrcReclog.info("src_points before removing: ", self.src_points.shape)
         self.src_points = self.src_points[self.src_points["num_rec"] > 0]
-        print("src_points after removing: ", self.src_points.shape)
+        self.log.SrcReclog.info("src_points after removing: ", self.src_points.shape)
 
     def erase_duplicate_events(
         self, thre_deg: float, thre_dep: float, thre_time_in_min: float
@@ -545,13 +503,7 @@ In this case, please set dist_in_data=True and read again."""
             axis=1,
             inplace=True,
         )
-
-        # remove rec_points by new src_points
-        self.remove_rec_by_new_src()
-
-        # sort by src_index
-        self.src_points.sort_values(by=["src_index"], inplace=True)
-        self.rec_points.sort_values(by=["src_index", "rec_index"], inplace=True)
+        self.update()
 
     def select_phase(self, phase_list):
         """
@@ -566,16 +518,10 @@ In this case, please set dist_in_data=True and read again."""
             "rec_points before selecting: {}".format(self.rec_points.shape)
         )
         self.rec_points = self.rec_points[self.rec_points["phase"].isin(phase_list)]
+        self.update()
         self.log.SrcReclog.info(
             "rec_points after selecting: {}".format(self.rec_points.shape)
         )
-
-        # modify num_rec in src_points
-        self.src_points["num_rec"] = self.rec_points.groupby("src_index").size()
-
-        # sort by src_index
-        self.src_points.sort_values(by=["src_index"], inplace=True)
-        self.rec_points.sort_values(by=["src_index", "rec_index"], inplace=True)
 
     def select_by_datetime(self, time_range):
         """
@@ -595,11 +541,7 @@ In this case, please set dist_in_data=True and read again."""
             (self.src_points["origin_time"] >= time_range[0])
             & (self.src_points["origin_time"] <= time_range[1])
         ]
-
-        # Remove receivers whose events have been removed
-        self.remove_rec_by_new_src(verbose=False)
-
-        self.reset_index()
+        self.update()
         self.log.SrcReclog.info(
             "src_points after selecting: {}".format(self.src_points.shape)
         )
@@ -617,9 +559,7 @@ In this case, please set dist_in_data=True and read again."""
             "rec_points before removing: {}".format(self.rec_points.shape)
         )
         self.rec_points = self.rec_points[~self.rec_points["staname"].isin(rec_list)]
-        self.remove_src_by_new_rec()
-        self.update_num_rec()
-        self.reset_index()
+        self.update()
         self.log.SrcReclog.info(
             "rec_points after removing: {}".format(self.rec_points.shape)
         )
@@ -646,7 +586,7 @@ In this case, please set dist_in_data=True and read again."""
         ]
 
         # Remove receivers whose events have been removed
-        self.remove_rec_by_new_src(verbose=False)
+        self.remove_rec_by_new_src()
 
         # Remove rest receivers out of region.
         self.rec_points = self.rec_points[
@@ -657,14 +597,30 @@ In this case, please set dist_in_data=True and read again."""
         ]
 
         # Remove empty sources
-        self.src_points = self.src_points[
-            self.src_points.index.isin(self.rec_points["src_index"])
-        ]
-        self.update_num_rec()
-        self.reset_index()
+        self.update()
         self.log.SrcReclog.info(
             "src_points after selecting: {}".format(self.src_points.shape)
         )
+        self.log.SrcReclog.info(
+            "rec_points after selecting: {}".format(self.rec_points.shape)
+        )
+
+    def select_depth(self, dep_min_max):
+        """Select sources in a range of depth
+
+        :param dep_min_max: limit of depth, ``[dep_min, dep_max]``
+        :type dep_min_max: sequence
+        """
+        self.log.SrcReclog.info('src_points before selecting: {}'.format(self.src_points.shape))
+        self.log.SrcReclog.info(
+            "rec_points before selecting: {}".format(self.rec_points.shape)
+        )
+        self.src_points = self.src_points[
+            (self.src_points['evdp'] >= dep_min_max[0]) &
+            (self.src_points['evdp'] <= dep_min_max[1])
+        ]
+        self.update()
+        self.log.SrcReclog.info('src_points after selecting: {}'.format(self.src_points.shape))
         self.log.SrcReclog.info(
             "rec_points after selecting: {}".format(self.rec_points.shape)
         )
@@ -707,9 +663,7 @@ In this case, please set dist_in_data=True and read again."""
         )
         drop_idx = self.rec_points[mask].index
         self.rec_points = self.rec_points.drop(index=drop_idx)
-        self.remove_src_by_new_rec()
-        self.update_num_rec()
-        self.reset_index()
+        self.update()
         self.log.SrcReclog.info(
             "rec_points after selecting: {}".format(self.rec_points.shape)
         )
@@ -727,7 +681,8 @@ In this case, please set dist_in_data=True and read again."""
             "rec_points before selecting: {}".format(self.rec_points.shape)
         )
         self.src_points = self.src_points[(self.src_points["num_rec"] >= num_rec)]
-        self.remove_rec_by_new_src(False)
+        # self.remove_rec_by_new_src()
+        self.update()
         self.log.SrcReclog.info(
             "src_points after selecting: {}".format(self.src_points.shape)
         )
@@ -792,7 +747,8 @@ In this case, please set dist_in_data=True and read again."""
         )
 
         # remove rec_points by new src_points
-        self.remove_rec_by_new_src()
+        # self.remove_rec_by_new_src()
+        self.update()
 
     def count_events_per_station(self):
         """
@@ -818,9 +774,11 @@ In this case, please set dist_in_data=True and read again."""
     def geo_weighting(self, scale=0.5, rec_weight=False):
         """Calculating geographical weights for sources
 
-        :param scale: Scale of reference distance parameter See equation 22 in Ruan et al., (2019),
-                      The reference distance is given by ``scale``* dis_average, defaults to 0.5
+        :param scale: Scale of reference distance parameter. 
+                      See equation 22 in Ruan et al., (2019). The reference distance is given by ``scale* dis_average``, defaults to 0.5
         :type scale: float, optional
+        :param rec_weight: Whether to calculate weights for receivers, defaults to False
+        :type rec_weight: bool, optional
         """
 
         self.src_points["weight"] = self._calc_weights(

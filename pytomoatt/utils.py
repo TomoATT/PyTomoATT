@@ -142,3 +142,69 @@ def ignore_nan_3d(data):
     )
     result = interpolated.reshape(data.shape)
     return result
+
+
+def define_rec_cols(dist_in_data, name_net_and_sta):
+    if not dist_in_data:
+        last_col = 7
+    else:
+        last_col = 8
+
+    if name_net_and_sta:
+        last_col += 1
+
+    if name_net_and_sta == False:
+        if not dist_in_data:
+            columns = [
+                "src_index",
+                "rec_index",
+                "staname",
+                "stla",
+                "stlo",
+                "stel",
+                "phase",
+                "tt",
+                "weight",
+            ]
+        else:
+            columns = [
+                "src_index",
+                "rec_index",
+                "staname",
+                "stla",
+                "stlo",
+                "stel",
+                "phase",
+                "dist_deg",
+                "tt",
+                "weight",
+            ]
+    else:
+        if not dist_in_data:
+            columns = [
+                "src_index",
+                "rec_index",
+                "netname",
+                "staname",
+                "stla",
+                "stlo",
+                "stel",
+                "phase",
+                "tt",
+                "weight",
+            ]
+        else:
+            columns = [
+                "src_index",
+                "rec_index",
+                "netname",
+                "staname",
+                "stla",
+                "stlo",
+                "stel",
+                "phase",
+                "dist_deg",
+                "tt",
+                "weight",
+            ]
+    return columns, last_col
