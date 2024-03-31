@@ -5,6 +5,7 @@ from os.path import dirname, join
 
 class TestSrcRec:
     fname: str = join(dirname(dirname(__file__)), 'examples', 'src_rec_file_eg')
+    fname1: str = join(dirname(__file__), 'test_srcrec_a.dat')
 
     def test_subcase_01(self):
         sr = SrcRec.read(self.fname)
@@ -30,12 +31,18 @@ class TestSrcRec:
         sr = SrcRec.read(self.fname)
         sr.select_depth([0, 10])
         assert sr.src_points.shape[0] == 1413 and sr.rec_points.shape[0] == 11226
-
+    
+    def test_subcase_06(self):
+        sr = SrcRec.read(self.fname)
+        sr1 = SrcRec.read(self.fname1, dist_in_data=True)
+        sr.append(sr1)
+        assert sr.src_points.shape[0] == 2506 and sr._count_records() == 19926
 
 if __name__ == '__main__':
     tsr = TestSrcRec()
     tsr.test_subcase_01()
     tsr.test_subcase_02()
     tsr.test_subcase_05()
+    tsr.test_subcase_06()
 
 
