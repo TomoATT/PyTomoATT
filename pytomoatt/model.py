@@ -5,7 +5,7 @@ from .para import ATTPara
 from .io.crustmodel import CrustModel
 from .io.asciimodel import ASCIIModel
 from .attarray import Dataset
-from .utils import init_axis, acosd, atand
+from .utils.common import init_axis, atand
 
 
 class ATTModel():

@@ -8,7 +8,7 @@ import h5py
 from .src_rec import SrcRec
 from .model import ATTModel
 from .para import ATTPara
-from .utils import to_vtk, init_axis
+from .utils.common import to_vtk, init_axis
 from .checkerboard import Checker
 
 

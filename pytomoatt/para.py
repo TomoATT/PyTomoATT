@@ -1,5 +1,5 @@
 import yaml
-from .utils import init_axis
+from .utils.common import init_axis
 
 
 class ATTPara:

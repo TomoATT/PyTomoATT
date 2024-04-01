@@ -3,7 +3,7 @@ import tqdm
 import pandas as pd
 from .distaz import DistAZ
 from .setuplog import SetupLog
-from .utils import define_rec_cols, setup_rec_points_dd, get_rec_points_types
+from .utils.src_rec_utils import define_rec_cols, setup_rec_points_dd, get_rec_points_types
 from sklearn.metrics.pairwise import haversine_distances
 import copy
 

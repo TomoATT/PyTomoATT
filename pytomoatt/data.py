@@ -2,7 +2,6 @@ import numpy as np
 import h5py
 from .para import ATTPara
 from .attarray import Dataset
-from .utils import asind, acosd
 
 
 class ATTData():
