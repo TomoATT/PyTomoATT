@@ -9,12 +9,12 @@ class TestSrcRec:
 
     def test_subcase_01(self):
         sr = SrcRec.read(self.fname)
-        sr.select_distance([0, 1])
+        sr.select_by_distance([0, 1])
         assert sr.rec_points.shape[0] == 19378
 
     def test_subcase_02(self):
         sr = SrcRec.read(self.fname)
-        sr.select_box_region([-1, 0, -1, 0])
+        sr.select_by_box_region([-1, 0, -1, 0])
         assert sr.rec_points.shape[0] == 671 and sr.src_points.shape[0] == 85
 
     def test_subcase_03(self):
@@ -29,7 +29,7 @@ class TestSrcRec:
 
     def test_subcase_05(self):
         sr = SrcRec.read(self.fname)
-        sr.select_depth([0, 10])
+        sr.select_by_depth([0, 10])
         assert sr.src_points.shape[0] == 1413 and sr.rec_points.shape[0] == 11226
     
     def test_subcase_06(self):
@@ -38,11 +38,17 @@ class TestSrcRec:
         sr.append(sr1)
         assert sr.src_points.shape[0] == 2506 and sr._count_records() == 19926
 
+    def test_subcase_07(self):
+        sr = SrcRec.read(self.fname)
+        sr.select_by_azi_gap(120)
+        assert sr.src_points.shape[0] == 329 and sr.rec_points.shape[0] == 3815
+
 if __name__ == '__main__':
     tsr = TestSrcRec()
     tsr.test_subcase_01()
     tsr.test_subcase_02()
     tsr.test_subcase_05()
     tsr.test_subcase_06()
+    tsr.test_subcase_07()
 
 

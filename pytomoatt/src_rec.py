@@ -763,7 +763,7 @@ In this case, please set dist_in_data=True and read again."""
             "rec_points after removing: {}".format(self.rec_points.shape)
         )
 
-    def select_box_region(self, region):
+    def select_by_box_region(self, region):
         """
         Select sources and station in a box region
 
@@ -804,7 +804,7 @@ In this case, please set dist_in_data=True and read again."""
             "rec_points after selection: {}".format(self.rec_points.shape)
         )
 
-    def select_depth(self, dep_min_max):
+    def select_by_depth(self, dep_min_max):
         """Select sources in a range of depth
 
         :param dep_min_max: limit of depth, ``[dep_min, dep_max]``
@@ -824,20 +824,24 @@ In this case, please set dist_in_data=True and read again."""
             "rec_points after selection: {}".format(self.rec_points.shape)
         )
 
-    def calc_distance(self):
+    def calc_distaz(self):
         """Calculate epicentral distance"""
         self.rec_points["dist_deg"] = 0.0
+        self.rec_points["az"] = 0.0
+        self.rec_points["baz"] = 0.0
         rec_group = self.rec_points.groupby("src_index")
         for idx, rec in rec_group:
-            dist = DistAZ(
+            da = DistAZ(
                 self.src_points.loc[idx]["evla"],
                 self.src_points.loc[idx]["evlo"],
                 rec["stla"].values,
                 rec["stlo"].values,
-            ).delta
-            self.rec_points["dist_deg"].loc[rec.index] = dist
+            )
+            self.rec_points.loc[rec.index, "dist_deg"] = da.delta
+            self.rec_points.loc[rec.index, "az"] = da.az
+            self.rec_points.loc[rec.index, "baz"] = da.baz
 
-    def select_distance(self, dist_min_max, recalc_dist=False):
+    def select_by_distance(self, dist_min_max, recalc_dist=False):
         """Select stations in a range of distance
         
         .. note::
@@ -852,7 +856,7 @@ In this case, please set dist_in_data=True and read again."""
         # rec_group = self.rec_points.groupby('src_index')
         if ("dist_deg" not in self.rec_points) or recalc_dist:
             self.log.SrcReclog.info("Calculating epicentral distance...")
-            self.calc_distance()
+            self.calc_distaz()
         elif not recalc_dist:
             pass
         else:
@@ -866,6 +870,37 @@ In this case, please set dist_in_data=True and read again."""
         drop_idx = self.rec_points[mask].index
         self.rec_points = self.rec_points.drop(index=drop_idx)
         self.update()
+        self.log.SrcReclog.info(
+            "rec_points after selection: {}".format(self._count_records())
+        )
+
+    def select_by_azi_gap(self, max_azi_gap: float):
+        """Select sources with azimuthal gap greater and equal than a number
+    
+        :param azi_gap: threshold of minimum azimuthal gap
+        :type azi_gap: float
+        """
+        self.log.SrcReclog.info(
+            "src_points before selection: {}".format(self.src_points.shape[0])
+        )
+        self.log.SrcReclog.info(
+            "rec_points before selection: {}".format(self._count_records())
+        )
+        if ("az" not in self.rec_points):
+            self.log.SrcReclog.info("Calculating azimuth...")
+            self.calc_distaz()
+        # calculate maximum azimuthal gap for each source
+        def calc_azi_gap(az):
+            sorted_az = np.sort(az)
+            az_diffs = np.diff(np.concatenate((sorted_az, [sorted_az[0] + 360])))
+            return np.max(az_diffs)
+        max_gap = self.rec_points.groupby('src_index').apply(lambda x: calc_azi_gap(x['az'].values))
+        self.src_points = self.src_points[(max_gap < max_azi_gap)]     
+        
+        self.update()
+        self.log.SrcReclog.info(
+            "src_points after selection: {}".format(self.src_points.shape[0])
+        )
         self.log.SrcReclog.info(
             "rec_points after selection: {}".format(self._count_records())
         )
