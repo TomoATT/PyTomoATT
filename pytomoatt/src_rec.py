@@ -24,8 +24,8 @@ class SrcRec:
         self.src_only = src_only
         self.src_points = None
         self.rec_points = None
-        self.rec_points_cr = None
-        self.rec_points_cs = None
+        self.rec_points_cr = pd.DataFrame()
+        self.rec_points_cs = pd.DataFrame()
         self.sources = None
         self.receivers = None
         self.fnames = [fname]
