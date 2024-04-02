@@ -43,6 +43,10 @@ class TestSrcRec:
         sr.select_by_azi_gap(120)
         assert sr.src_points.shape[0] == 329 and sr.rec_points.shape[0] == 3815
 
+    def test_subcase_08(self):
+        sr = SrcRec.read(self.fname)
+        sr.select_by_phase('P')
+
 if __name__ == '__main__':
     tsr = TestSrcRec()
     tsr.test_subcase_01()
