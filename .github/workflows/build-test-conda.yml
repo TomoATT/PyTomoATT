@@ -18,15 +18,9 @@ jobs:
       with:
         ref: devel
     - name: Set up Python
-      uses: actions/setup-python@v3
+      uses: conda-incubator/setup-miniconda@v3
       with:
-        python-version: ${{matrix.python-version}}
-    - name: Add conda to system path
-      run: |
-        # $CONDA is an environment variable pointing to the root of the miniconda directory
-        # echo $CONDA/bin >> $GITHUB_PATH
-        ln -s $CONDA/bin/conda /usr/bin/conda
-        conda info
+        python-version: ${{ matrix.python-version }}
     - name: Install dependencies
       run: |
         conda install numpy scipy h5py pyyaml pandas xarray
@@ -38,11 +32,10 @@ jobs:
         with:
           fetch-depth: 1
       - name: Set up Python
-        uses: actions/setup-python@v3
-        with:
-          python-version: '3.11'
+        uses: conda-incubator/setup-miniconda@v3
       - name: Install dependencies
         run: |
+          conda install numpy scipy h5py pyyaml pandas xarray
           python -m pip install --upgrade pip
           pip install .
           pip install pytest pytest-cov
