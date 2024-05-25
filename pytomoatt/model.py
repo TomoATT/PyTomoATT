@@ -67,13 +67,14 @@ class ATTModel():
         """Convert to anisotropic strength (epsilon) and azimuth (phi)
         """
         self.epsilon = np.sqrt(self.eta**2+self.xi**2)
-        self.phi = np.zeros_like(self.epsilon)
-        idx = np.where(self.xi <= 0)
-        self.phi[idx] = 90 + 0.5*atand(self.eta[idx]/self.xi[idx])
-        idx = np.where((self.xi > 0) & (self.eta <= 0))
-        self.phi[idx] = 180 + 0.5*atand(self.eta[idx]/self.xi[idx])
-        idx = np.where((self.xi > 0) & (self.eta > 0))
-        self.phi[idx] = 0.5*atand(self.eta[idx]/self.xi[idx])
+        # self.phi = np.zeros_like(self.epsilon)
+        self.phi = np.rad2deg(0.5*np.arctan2(self.eta, self.xi))
+        # idx = np.where(self.xi <= 0)
+        # self.phi[idx] = 90 + 0.5*atand(self.eta[idx]/self.xi[idx])
+        # idx = np.where((self.xi > 0) & (self.eta <= 0))
+        # self.phi[idx] = 180 + 0.5*atand(self.eta[idx]/self.xi[idx])
+        # idx = np.where((self.xi > 0) & (self.eta > 0))
+        # self.phi[idx] = 0.5*atand(self.eta[idx]/self.xi[idx])
 
     def to_xarray(self):
         """Convert to xarray
