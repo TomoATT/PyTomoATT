@@ -23,6 +23,8 @@ class Dataset(xarray.Dataset):
         :type depth: float
         :param field: Field name in ATT model data
         :type field: str
+        :param samp_interval: Sampling interval, defaults to 0
+        :type samp_interval: int, optional
         :return: xyz data with 3 columns [lon, lat, value]
         :rtype: numpy.ndarray
         """

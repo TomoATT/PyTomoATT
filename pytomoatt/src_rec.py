@@ -1007,6 +1007,98 @@ In this case, please set dist_in_data=True and read again."""
             "num_events"
         ].transform("max")
 
+    def generate_double_difference(self, type='cs', max_azi_gap=15, max_dist_gap=2.5, recalc_baz=False):
+        """
+        Generate double difference data
+
+        :param type: Type of double difference, options: ``cr``, ``cs`` or ``both``, defaults to ``cs``
+        :type type: str, optional
+        :param max_azi_gap: Maximum azimuthal gap for selecting events, defaults to 15
+        :type max_azi_gap: float, optional
+        :param max_dist_gap: Maximum distance gap for selecting events, defaults to 2.5
+        :type max_dist_gap: float, optional
+
+        ``self.rec_points_cr`` or ``self.rec_points_cs`` are generated
+        """
+
+        if ("dist_deg" not in self.rec_points or "baz" not in self.rec_points) or recalc_baz:
+            self.calc_distaz()
+
+        if type == 'cs':
+            self._generate_cs(max_azi_gap, max_dist_gap)
+        elif type == 'cr':
+            self._generate_cr(max_azi_gap, max_dist_gap)
+        elif type == 'both':
+            self._generate_cs(max_azi_gap, max_dist_gap)
+            self._generate_cr(max_azi_gap, max_dist_gap)
+        else:
+            self.log.SrcReclog.error(
+                "Only 'cs', 'cr' or 'both' are supported for type of double difference"
+            )
+
+        self.update()
+
+    def _generate_cs(self, max_azi_gap, max_dist_gap):
+        names, _ = setup_rec_points_dd('cs')
+        self.rec_points_cs = pd.DataFrame(columns=names)
+        src = self.rec_points.groupby("src_index")
+        for idx, rec_data in src:
+            if rec_data.shape[0] < 2:
+                continue
+            for i in range(rec_data.shape[0]):
+                for j in range(i + 1, rec_data.shape[0]):
+                    if abs(rec_data.iloc[i]["baz"] - rec_data.iloc[j]["baz"]) < max_azi_gap or \
+                       abs(rec_data.iloc[i]["dist_deg"] - rec_data.iloc[j]["dist_deg"]) < max_dist_gap:
+                        self.rec_points_cs = self.rec_points_cs.append(
+                            {
+                                "src_index": idx,
+                                "rec_index1": rec_data.iloc[i]["rec_index"],
+                                "staname1": rec_data.iloc[i]["staname"],
+                                "stla1": rec_data.iloc[i]["stla"],
+                                "stlo1": rec_data.iloc[i]["stlo"],
+                                "stel1": rec_data.iloc[i]["stel"],
+                                "rec_index2": rec_data.iloc[j]["rec_index"],
+                                "staname2": rec_data.iloc[j]["staname"],
+                                "stla2": rec_data.iloc[j]["stla"],
+                                "stlo2": rec_data.iloc[j]["stlo"],
+                                "stel2": rec_data.iloc[j]["stel"],
+                                "phase": "P,cs",
+                                "tt": rec_data.iloc[i]["tt"] - rec_data.iloc[j]["tt"],
+                                "weight": 1.0,
+                            },
+                            ignore_index=True,
+                        )
+
+    def _generate_cr(self, max_azi_gap, max_dist_gap):
+        names, _ = setup_rec_points_dd('cr')
+        self.rec_points_cr = pd.DataFrame(columns=names)
+        for i, rec in self.receivers.iterrows():
+            rec_data = self.rec_points[self.rec_points["staname"] == rec["staname"]]
+            if rec_data.shape[0] < 2:
+                continue
+            for i in range(rec_data.shape[0]):
+                for j in range(i + 1, rec_data.shape[0]):
+                    if abs(rec_data.iloc[i]["baz"] - rec_data.iloc[j]["baz"]) < max_azi_gap or \
+                       abs(rec_data.iloc[i]["dist_deg"] - rec_data.iloc[j]["dist_deg"]) < max_dist_gap:
+                        self.rec_points_cr = self.rec_points_cr.append(
+                            {
+                                "src_index": rec_data.iloc[i]["src_index"],
+                                "rec_index": rec_data.iloc[i]["rec_index"],
+                                "staname": rec["staname"],
+                                "stla": rec["stla"],
+                                "stlo": rec["stlo"],
+                                "stel": rec["stel"],
+                                "event_id2": self.src_points.loc[rec_data.iloc[j]["src_index"]]["event_id"],
+                                "evla2": self.src_points.loc[rec_data.iloc[j]["src_index"]]["evla"],
+                                "evlo2": self.src_points.loc[rec_data.iloc[j]["src_index"]]["evlo"],
+                                "evdp2": self.src_points.loc[rec_data.iloc[j]["src_index"]]["evdp"],
+                                "phase": "P,cr",
+                                "tt": rec_data.iloc[i]["tt"] - rec_data.iloc[j]["tt"],
+                                "weight": 1.0,
+                            },
+                            ignore_index=True,
+                        )
+
     def _count_records(self):
         count = 0
         count += self.rec_points.shape[0]
