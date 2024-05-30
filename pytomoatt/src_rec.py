@@ -488,6 +488,21 @@ In this case, please set dist_in_data=True and read again."""
                 [self.rec_points, sr.rec_points], ignore_index=True
             )
 
+            # append rec_points_cs
+            if not sr.rec_points_cs.empty:
+                sr.rec_points_cs["src_index"] += n_src_offset
+                self.rec_points_cs = pd.concat(
+                    [self.rec_points_cs, sr.rec_points_cs], ignore_index=True
+                )
+            
+            # append rec_points_cr
+            if not sr.rec_points_cr.empty:
+                sr.rec_points_cr["src_index"] += n_src_offset
+                sr.rec_points_cr["src_index2"] += n_src_offset
+                self.rec_points_cr = pd.concat(
+                    [self.rec_points_cr, sr.rec_points_cr], ignore_index=True
+                )
+
         # store fnames
         self.fnames.extend(sr.fnames)
 
