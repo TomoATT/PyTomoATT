@@ -1,7 +1,7 @@
 import numpy as np
 from os.path import dirname, abspath, join
 from scipy.interpolate import griddata
-from ..utils import init_axis, ignore_nan_3d
+from ..utils.common import init_axis, ignore_nan_3d
 from ..setuplog import SetupLog
 import h5py
 
@@ -24,7 +24,7 @@ class CrustModel():
     def __init__(self, fname=join(dirname(dirname(abspath(__file__))), 'data', 'crust1.0.h5')) -> None:
         """Read internal CRUST1.0 model
 
-        :param fname: _description_, defaults to join(dirname(dirname(abspath(__file__))), 'data', 'crust1.0-vp.npz')
+        :param fname: Path to CRUST1.0 model, defaults to join(dirname(dirname(abspath(__file__))), 'data', 'crust1.0-vp.npz')
         :type fname: str, optional
         """
         with h5py.File(fname) as f:

@@ -3,7 +3,7 @@ import tqdm
 import pandas as pd
 from .distaz import DistAZ
 from .setuplog import SetupLog
-from .utils import define_rec_cols, setup_rec_points_dd, get_rec_points_types
+from .utils.src_rec_utils import define_rec_cols, setup_rec_points_dd, get_rec_points_types
 from sklearn.metrics.pairwise import haversine_distances
 import copy
 
@@ -24,8 +24,8 @@ class SrcRec:
         self.src_only = src_only
         self.src_points = None
         self.rec_points = None
-        self.rec_points_cr = None
-        self.rec_points_cs = None
+        self.rec_points_cr = pd.DataFrame()
+        self.rec_points_cs = pd.DataFrame()
         self.sources = None
         self.receivers = None
         self.fnames = [fname]
@@ -247,27 +247,43 @@ In this case, please set dist_in_data=True and read again."""
             sr.rec_points_cr = alldf[
                 alldf[11].astype(str).str.contains("cr")
             ].reset_index(drop=True)
-            if not sr.rec_points_cr.empty:
-                if sr.rec_points_cr.shape[1] == last_col + 1:
+            if sr.rec_points_cr.shape[1] == last_col + 1:
+                if not sr.rec_points_cr.empty:
                     # add another column for weight
                     sr.rec_points_cr.loc[:, last_col + 1] = 1.0
-                # set column names and types
-                cols, data_type = setup_rec_points_dd(type='cr')
-                sr.rec_points_cr.columns = cols
-                sr.rec_points_cr = sr.rec_points_cr.astype(data_type)
+                else:
+                    sr.rec_points_cr[last_col + 1] = pd.Series()
+            elif sr.rec_points_cr.shape[1] not in [last_col+1, last_col+2]:
+                sr.log.SrcReclog.error(
+                    f"Only common receiver data with {last_col+1} or {last_col+2} columns are supported, "
+                    "please check the format of common receiver data"
+                )
+                return sr
+            # set column names and types
+            cols, data_type = setup_rec_points_dd(type='cr')
+            sr.rec_points_cr.columns = cols
+            sr.rec_points_cr = sr.rec_points_cr.astype(data_type)
 
             # read common source data
             sr.rec_points_cs = alldf[
                 alldf[11].astype(str).str.contains("cs")
             ].reset_index(drop=True)
-            if not sr.rec_points_cs.empty:
-                if sr.rec_points_cs.shape[1] == last_col + 1:
+            if sr.rec_points_cs.shape[1] == last_col + 1:
+                if not sr.rec_points_cs.empty:
                     # add another column for weight
                     sr.rec_points_cs.loc[:, last_col + 1] = 1.0
-                # set column names and types
-                cols, data_type = setup_rec_points_dd(type='cs')
-                sr.rec_points_cs.columns = cols
-                sr.rec_points_cs = sr.rec_points_cs.astype(data_type)
+                else:
+                    sr.rec_points_cs[last_col + 1] = pd.Series()
+            elif sr.rec_points_cs.shape[1] not in [last_col+1, last_col+2]:
+                sr.log.SrcReclog.error(
+                    f"Only common source data with {last_col+1} or {last_col+2} columns are supported, "
+                    "please check the format of common source data"
+                )
+                return sr
+            # set column names and types
+            cols, data_type = setup_rec_points_dd(type='cs')
+            sr.rec_points_cs.columns = cols
+            sr.rec_points_cs = sr.rec_points_cs.astype(data_type)
 
             sr.update_unique_src_rec()
         return sr
@@ -438,7 +454,7 @@ In this case, please set dist_in_data=True and read again."""
             )
             self.rec_points_cr.reset_index(drop=True, inplace=True)
 
-        self.src_points["src_index"] = new_index
+        self.src_points.set_index(new_index, inplace=True)
         self.src_points.index.name = "src_index"
 
         # reset rec_index to be 0, 1, 2, ... for rec_points
@@ -463,7 +479,9 @@ In this case, please set dist_in_data=True and read again."""
 
         self.reset_index()
         sr.reset_index()
-
+        
+        self.log.SrcReclog.info(f"src_points before appending: {self.src_points.shape[0]}")
+        self.log.SrcReclog.info(f"rec_points before appending: {self._count_records()}")
         # number of sources to be added
         n_src_offset = self.src_points.shape[0]
 
@@ -547,6 +565,10 @@ In this case, please set dist_in_data=True and read again."""
         update num_rec in src_points by current rec_points
         """
         self.src_points["num_rec"] = self.rec_points.groupby("src_index").size()
+        if not self.rec_points_cr.empty:
+            self.src_points["num_rec"] += self.rec_points_cr.groupby("src_index").size()
+        if not self.rec_points_cs.empty:
+            self.src_points["num_rec"] += self.rec_points_cs.groupby("src_index").size()
 
     def update(self):
         """
@@ -566,6 +588,8 @@ In this case, please set dist_in_data=True and read again."""
         # sort by src_index
         self.src_points.sort_values(by=["src_index"], inplace=True)
         self.rec_points.sort_values(by=["src_index", "rec_index"], inplace=True)
+        self.rec_points_cr.sort_values(by=["src_index", "rec_index"], inplace=True)
+        self.rec_points_cs.sort_values(by=["src_index", "rec_index1"], inplace=True)
 
     def erase_src_with_no_rec(self):
         """
@@ -679,22 +703,30 @@ In this case, please set dist_in_data=True and read again."""
         )
         self.update()
 
-    def select_phase(self, phase_list):
+    def select_by_phase(self, phase_list):
         """
         select interested phase and remove others
 
         :param phase_list: List of phases for travel times used for inversion
         :type phase_list: list of str
         """
-        if not isinstance(phase_list, (list, str)):
+        if not isinstance(phase_list, (list, tuple, str)):
             raise TypeError("phase_list should be in list or str")
+        if isinstance(phase_list, str):
+            phase_list = [phase_list]
         self.log.SrcReclog.info(
-            "rec_points before selecting: {}".format(self.rec_points.shape)
+            "rec_points before selection: {}".format(self._count_records())
         )
         self.rec_points = self.rec_points[self.rec_points["phase"].isin(phase_list)]
+        self.rec_points_cs = self.rec_points_cs[
+            self.rec_points_cs["phase"].isin([f'{ph},cs' for ph in phase_list])
+        ]
+        self.rec_points_cr = self.rec_points_cr[
+            self.rec_points_cr["phase"].isin([f'{ph},cr' for ph in phase_list])
+        ]
         self.update()
         self.log.SrcReclog.info(
-            "rec_points after selecting: {}".format(self.rec_points.shape)
+            "rec_points after selection: {}".format(self._count_records())
         )
 
     def select_by_datetime(self, time_range):
@@ -706,10 +738,10 @@ In this case, please set dist_in_data=True and read again."""
         """
         # select source within this time range.
         self.log.SrcReclog.info(
-            "src_points before selecting: {}".format(self.src_points.shape)
+            "src_points before selection: {}".format(self.src_points.shape[0])
         )
         self.log.SrcReclog.info(
-            "rec_points before selecting: {}".format(self.rec_points.shape)
+            "rec_points before selection: {}".format(self._count_records())
         )
         self.src_points = self.src_points[
             (self.src_points["origin_time"] >= time_range[0])
@@ -717,10 +749,10 @@ In this case, please set dist_in_data=True and read again."""
         ]
         self.update()
         self.log.SrcReclog.info(
-            "src_points after selecting: {}".format(self.src_points.shape)
+            "src_points after selection: {}".format(self.src_points.shape[0])
         )
         self.log.SrcReclog.info(
-            "rec_points after selecting: {}".format(self.rec_points.shape)
+            "rec_points after selection: {}".format(self._count_records())
         )
 
     def remove_specified_recs(self, rec_list):
@@ -738,7 +770,7 @@ In this case, please set dist_in_data=True and read again."""
             "rec_points after removing: {}".format(self.rec_points.shape)
         )
 
-    def select_box_region(self, region):
+    def select_by_box_region(self, region):
         """
         Select sources and station in a box region
 
@@ -747,10 +779,10 @@ In this case, please set dist_in_data=True and read again."""
         """
         # select source within this region.
         self.log.SrcReclog.info(
-            "src_points before selecting: {}".format(self.src_points.shape)
+            "src_points before selection: {}".format(self.src_points.shape[0])
         )
         self.log.SrcReclog.info(
-            "rec_points before selecting: {}".format(self.rec_points.shape)
+            "rec_points before selection: {}".format(self._count_records())
         )
         self.src_points = self.src_points[
             (self.src_points["evlo"] >= region[0])
@@ -773,58 +805,65 @@ In this case, please set dist_in_data=True and read again."""
         # Remove empty sources
         self.update()
         self.log.SrcReclog.info(
-            "src_points after selecting: {}".format(self.src_points.shape)
+            "src_points after selection: {}".format(self.src_points.shape)
         )
         self.log.SrcReclog.info(
-            "rec_points after selecting: {}".format(self.rec_points.shape)
+            "rec_points after selection: {}".format(self.rec_points.shape)
         )
 
-    def select_depth(self, dep_min_max):
+    def select_by_depth(self, dep_min_max):
         """Select sources in a range of depth
 
         :param dep_min_max: limit of depth, ``[dep_min, dep_max]``
         :type dep_min_max: sequence
         """
-        self.log.SrcReclog.info('src_points before selecting: {}'.format(self.src_points.shape))
+        self.log.SrcReclog.info('src_points before selection: {}'.format(self.src_points.shape))
         self.log.SrcReclog.info(
-            "rec_points before selecting: {}".format(self.rec_points.shape)
+            "rec_points before selection: {}".format(self.rec_points.shape)
         )
         self.src_points = self.src_points[
             (self.src_points['evdp'] >= dep_min_max[0]) &
             (self.src_points['evdp'] <= dep_min_max[1])
         ]
         self.update()
-        self.log.SrcReclog.info('src_points after selecting: {}'.format(self.src_points.shape))
+        self.log.SrcReclog.info('src_points after selection: {}'.format(self.src_points.shape))
         self.log.SrcReclog.info(
-            "rec_points after selecting: {}".format(self.rec_points.shape)
+            "rec_points after selection: {}".format(self.rec_points.shape)
         )
 
-    def calc_distance(self):
-        """Calculate epicentral distance"""
-        self.rec_points["dist"] = 0.0
+    def calc_distaz(self):
+        """Calculate epicentral distance and azimuth for each receiver"""
+        self.rec_points["dist_deg"] = 0.0
+        self.rec_points["az"] = 0.0
+        self.rec_points["baz"] = 0.0
         rec_group = self.rec_points.groupby("src_index")
         for idx, rec in rec_group:
-            dist = DistAZ(
+            da = DistAZ(
                 self.src_points.loc[idx]["evla"],
                 self.src_points.loc[idx]["evlo"],
                 rec["stla"].values,
                 rec["stlo"].values,
-            ).delta
-            self.rec_points["dist"].loc[rec.index] = dist
+            )
+            self.rec_points.loc[rec.index, "dist_deg"] = da.delta
+            self.rec_points.loc[rec.index, "az"] = da.az
+            self.rec_points.loc[rec.index, "baz"] = da.baz
 
-    def select_distance(self, dist_min_max, recalc_dist=False):
+    def select_by_distance(self, dist_min_max, recalc_dist=False):
         """Select stations in a range of distance
+        
+        .. note::
+            This criteria only works for absolute travel time data.
 
         :param dist_min_max: limit of distance in deg, ``[dist_min, dist_max]``
         :type dist_min_max: list or tuple
         """
         self.log.SrcReclog.info(
-            "rec_points before selecting: {}".format(self.rec_points.shape)
+            "rec_points before selection: {}".format(self._count_records())
         )
         # rec_group = self.rec_points.groupby('src_index')
-        if ("dist" not in self.rec_points) or recalc_dist:
+        if ("dist_deg" not in self.rec_points) or recalc_dist:
             self.log.SrcReclog.info("Calculating epicentral distance...")
-            self.calc_distance()
+            self.calc_distaz()
         elif not recalc_dist:
             pass
         else:
@@ -832,14 +871,45 @@ In this case, please set dist_in_data=True and read again."""
                 "No such field of dist, please set up recalc_dist to True"
             )
         # for _, rec in rec_group:
-        mask = (self.rec_points["dist"] < dist_min_max[0]) | (
-            self.rec_points["dist"] > dist_min_max[1]
+        mask = (self.rec_points["dist_deg"] < dist_min_max[0]) | (
+            self.rec_points["dist_deg"] > dist_min_max[1]
         )
         drop_idx = self.rec_points[mask].index
         self.rec_points = self.rec_points.drop(index=drop_idx)
         self.update()
         self.log.SrcReclog.info(
-            "rec_points after selecting: {}".format(self.rec_points.shape)
+            "rec_points after selection: {}".format(self._count_records())
+        )
+
+    def select_by_azi_gap(self, max_azi_gap: float):
+        """Select sources with azimuthal gap greater and equal than a number
+    
+        :param azi_gap: threshold of minimum azimuthal gap
+        :type azi_gap: float
+        """
+        self.log.SrcReclog.info(
+            "src_points before selection: {}".format(self.src_points.shape[0])
+        )
+        self.log.SrcReclog.info(
+            "rec_points before selection: {}".format(self._count_records())
+        )
+        if ("az" not in self.rec_points):
+            self.log.SrcReclog.info("Calculating azimuth...")
+            self.calc_distaz()
+        # calculate maximum azimuthal gap for each source
+        def calc_azi_gap(az):
+            sorted_az = np.sort(az)
+            az_diffs = np.diff(np.concatenate((sorted_az, [sorted_az[0] + 360])))
+            return np.max(az_diffs)
+        max_gap = self.rec_points.groupby('src_index').apply(lambda x: calc_azi_gap(x['az'].values))
+        self.src_points = self.src_points[(max_gap < max_azi_gap)]     
+        
+        self.update()
+        self.log.SrcReclog.info(
+            "src_points after selection: {}".format(self.src_points.shape[0])
+        )
+        self.log.SrcReclog.info(
+            "rec_points after selection: {}".format(self._count_records())
         )
 
     def select_by_num_rec(self, num_rec: int):
@@ -849,19 +919,19 @@ In this case, please set dist_in_data=True and read again."""
         """
         self.update_num_rec()
         self.log.SrcReclog.info(
-            "src_points before selecting: {}".format(self.src_points.shape)
+            "src_points before selection: {}".format(self.src_points.shape[0])
         )
         self.log.SrcReclog.info(
-            "rec_points before selecting: {}".format(self.rec_points.shape)
+            "rec_points before selection: {}".format(self._count_records())
         )
         self.src_points = self.src_points[(self.src_points["num_rec"] >= num_rec)]
         # self.remove_rec_by_new_src()
         self.update()
         self.log.SrcReclog.info(
-            "src_points after selecting: {}".format(self.src_points.shape)
+            "src_points after selection: {}".format(self.src_points.shape[0])
         )
         self.log.SrcReclog.info(
-            "rec_points after selecting: {}".format(self.rec_points.shape)
+            "rec_points after selection: {}".format(self._count_records())
         )
 
     def select_one_event_in_each_subgrid(self, d_deg: float, d_km: float):
@@ -874,7 +944,7 @@ In this case, please set dist_in_data=True and read again."""
         """
 
         self.log.SrcReclog.info(
-            "src_points before selecting: {}".format(self.src_points.shape)
+            "src_points before selection: {}".format(self.src_points.shape[0])
         )
         self.log.SrcReclog.info("processing... (this may take a few minutes)")
 
@@ -917,7 +987,7 @@ In this case, please set dist_in_data=True and read again."""
         self.src_points = self.src_points.sort_index()
 
         self.log.SrcReclog.info(
-            "src_points after selecting: {}".format(self.src_points.shape)
+            "src_points after selection: {}".format(self.src_points.shape[0])
         )
 
         # remove rec_points by new src_points
@@ -936,6 +1006,13 @@ In this case, please set dist_in_data=True and read again."""
         self.rec_points["num_events"] = self.rec_points.groupby("staname")[
             "num_events"
         ].transform("max")
+
+    def _count_records(self):
+        count = 0
+        count += self.rec_points.shape[0]
+        count += self.rec_points_cs.shape[0]
+        count += self.rec_points_cr.shape[0]
+        return count
 
     def _calc_weights(self, lat, lon, scale):
         points = pd.concat([lon, lat], axis=1)
@@ -967,80 +1044,6 @@ In this case, please set dist_in_data=True and read again."""
             # apply weights to rec_points
             for staname, weight in zip(self.receivers['staname'], weights):
                 self.rec_points.loc[self.rec_points['staname'] == staname, 'weight'] = weight
-    #
-    # This function is comment out temprarly because it includes verified bug and not modified.
-    #
-    # def merge_adjacent_stations(self, d_deg:float, d_km:float):
-    #    """
-    #    merge adjacent stations as one station
-    #    d_deg : float
-    #        grid size in degree
-    #    d_km : float
-    #        grid size in km
-    #    """
-
-    #    # count the number of events per station
-    #    self.count_events_per_station()
-
-    #    # number of unique stations before merging
-    #    print('number of unique stations before merging: ', self.rec_points['staname'].nunique())
-
-    #    # create 'lat_group', 'lon_group' and 'dep_group' columns from 'stla', 'stlo' and 'stel'
-    #    def create_groups(row, column, d):
-    #        return int(row[column]/d)
-
-    #    self.rec_points['lat_group'] = self.rec_points.apply(lambda x: create_groups(x, 'stla', d_deg), axis=1)
-    #    self.rec_points['lon_group'] = self.rec_points.apply(lambda x: create_groups(x, 'stlo', d_deg), axis=1)
-    #    self.rec_points['dep_group'] = self.rec_points.apply(lambda x: create_groups(x, 'stel', d_km*1000), axis=1)
-
-    #    # sort src_points by 'lat_group' and 'lon_group' and 'dep_group'
-    #    self.rec_points = self.rec_points.sort_values(by=['lat_group', 'lon_group', 'dep_group', 'num_events'], ascending=[True, True, True, False])
-
-    #    # find all events in the same lat_group and lon_group and dep_group
-    #    # and copy the 'staname' 'stlo' 'stla' 'stel' to all rows within the same group from the row where 'count' is the largest
-    #    self.rec_points['staname'] = self.rec_points.groupby(['lat_group', 'lon_group', 'dep_group'])['staname'].transform(lambda x: x.iloc[0])
-    #    self.rec_points['stlo'] = self.rec_points.groupby(['lat_group', 'lon_group', 'dep_group'])['stlo'].transform(lambda x: x.iloc[0])
-    #    self.rec_points['stla'] = self.rec_points.groupby(['lat_group', 'lon_group', 'dep_group'])['stla'].transform(lambda x: x.iloc[0])
-    #    self.rec_points['stel'] = self.rec_points.groupby(['lat_group', 'lon_group', 'dep_group'])['stel'].transform(lambda x: x.iloc[0])
-
-    #    # drop 'lat_group' and 'lon_group' and 'dep_group'
-    #    self.rec_points = self.rec_points.drop(columns=['lat_group', 'lon_group', 'dep_group'])
-
-    #    # sort
-    #    self.rec_points = self.rec_points.sort_values(by=['src_index','rec_index'])
-
-    #    # update the num_events
-    #    self.count_events_per_station()
-
-    #    # number of unique stations after merging
-    #    print('number of unique stations after merging: ', self.rec_points['staname'].nunique())
-
-    #
-    # This function is comment out temprarly because it includes verified bug and not modified.
-    #
-    # def merge_duplicated_station(self):
-    #    """
-    #    merge duplicated stations as one station
-    #    duplicated stations are defined as stations with the same staname
-    #    """
-
-    #    # number of unique stations before merging
-    #    print('number of unique stations before merging: ', self.rec_points['staname'].nunique())
-
-    #    # sort rec_points by 'src_index' then 'staname'
-    #    self.rec_points = self.rec_points.sort_values(by=['src_index', 'staname'])
-
-    #    # find all duplicated stations in each src_index and drop except the first one
-    #    self.rec_points = self.rec_points.drop_duplicates(subset=['src_index', 'staname'], keep='first')
-
-    #    # sort rec_points by 'src_index' then 'rec_index'
-    #    self.rec_points = self.rec_points.sort_values(by=['src_index', 'rec_index'])
-
-    #    # update the num_events
-    #    self.count_events_per_station()
-
-    #    # number of unique stations after merging
-    #    print('number of unique stations after merging: ', self.rec_points['staname'].nunique())
 
     def add_noise(self, range_in_sec=0.1, mean_in_sec=0.0, shape="gaussian"):
         """Add random noise on travel time

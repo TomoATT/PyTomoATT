@@ -16,7 +16,7 @@ class Dataset(xarray.Dataset):
         ds = cls(dataset.data_vars, dataset.coords)
         return ds
 
-    def interp_dep(self, depth:float, field:str):
+    def interp_dep(self, depth:float, field:str, samp_interval=0):
         """Interpolate map view with given depth
 
         :param depth: Depth in km
@@ -28,27 +28,33 @@ class Dataset(xarray.Dataset):
         """
         if field not in self.data_vars.keys():
             raise ValueError('Error field name of {}'.format(field))
-        idx = np.where(self.coords['dep'].values == depth)[0]
+        # resample self of xarray with given interval of ``samp_interval``
+
+        if samp_interval > 0:
+            resampled = self.isel(t=slice(0, None, samp_interval), p=slice(0, None, samp_interval))
+        else:
+            resampled = self
+        idx = np.where(resampled.coords['dep'].values == depth)[0]
         if idx.size > 0:
             offset = 0
-            data = np.zeros([self.coords['lat'].size*self.coords['lon'].size, 3])
-            for i, la in enumerate(self.coords['lat'].values):
-                for j, lo in enumerate(self.coords['lon'].values):
-                    data[offset] = [lo, la, self.data_vars[field].values[idx[0], i, j]]
+            data = np.zeros([resampled.coords['lat'].size*resampled.coords['lon'].size, 3])
+            for i, la in enumerate(resampled.coords['lat'].values):
+                for j, lo in enumerate(resampled.coords['lon'].values):
+                    data[offset] = [lo, la, resampled.data_vars[field].values[idx[0], i, j]]
                     offset += 1
         else:
             rad = 6371 - depth
-            points = np.zeros([self.coords['lat'].size*self.coords['lon'].size, 4])
+            points = np.zeros([resampled.coords['lat'].size*resampled.coords['lon'].size, 4])
             offset = 0
-            for _, la in enumerate(self.coords['lat'].values):
-                for _, lo in enumerate(self.coords['lon'].values):
+            for _, la in enumerate(resampled.coords['lat'].values):
+                for _, lo in enumerate(resampled.coords['lon'].values):
                     points[offset] = [rad, la, lo, 0.]
                     offset += 1
             points[:, 3] = interpn(
-                (self.coords['rad'].values, 
-                self.coords['lat'].values, 
-                self.coords['lon'].values),
-                self.data_vars[field].values,
+                (resampled.coords['rad'].values, 
+                resampled.coords['lat'].values, 
+                resampled.coords['lon'].values),
+                resampled.data_vars[field].values,
                 points[:, 0:3]
             )
             data = points[:, [2, 1, 3]]

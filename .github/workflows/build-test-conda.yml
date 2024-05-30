@@ -10,7 +10,7 @@ jobs:
       max-parallel: 5
       matrix:
         os: [ubuntu-latest, macos-latest]
-        python-version: ["3.9", "3.10", "3.11"]
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
     runs-on: ${{matrix.os}}
     
     steps:
@@ -18,13 +18,9 @@ jobs:
       with:
         ref: devel
     - name: Set up Python
-      uses: actions/setup-python@v3
+      uses: conda-incubator/setup-miniconda@v3
       with:
-        python-version: ${{matrix.python-version}}
-    - name: Add conda to system path
-      run: |
-        # $CONDA is an environment variable pointing to the root of the miniconda directory
-        echo $CONDA/bin >> $GITHUB_PATH
+        python-version: ${{ matrix.python-version }}
     - name: Install dependencies
       run: |
         conda install numpy scipy h5py pyyaml pandas xarray
@@ -36,11 +32,12 @@ jobs:
         with:
           fetch-depth: 1
       - name: Set up Python
-        uses: actions/setup-python@v3
+        uses: conda-incubator/setup-miniconda@v3
         with:
-          python-version: '3.11'
+          python-version: "3.12"
       - name: Install dependencies
         run: |
+          conda install numpy scipy h5py pyyaml pandas xarray
           python -m pip install --upgrade pip
           pip install .
           pip install pytest pytest-cov
