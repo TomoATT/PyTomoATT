@@ -1042,62 +1042,84 @@ In this case, please set dist_in_data=True and read again."""
         names, _ = setup_rec_points_dd('cs')
         self.rec_points_cs = pd.DataFrame(columns=names)
         src = self.rec_points.groupby("src_index")
-        for idx, rec_data in src:
+        dd_data = []
+        for idx, rec_data in tqdm.tqdm(
+                src, total=len(src)
+            ):
             if rec_data.shape[0] < 2:
                 continue
+            baz_values = rec_data['baz'].values
+            dist_deg_values = rec_data['dist_deg'].values
+            rec_indices = rec_data['rec_index'].values
+            stanames = rec_data['staname'].values
+            stlas = rec_data['stla'].values
+            stlos = rec_data['stlo'].values
+            stels = rec_data['stel'].values
+            tts = rec_data['tt'].values
             for i in range(rec_data.shape[0]):
                 for j in range(i + 1, rec_data.shape[0]):
-                    if abs(rec_data.iloc[i]["baz"] - rec_data.iloc[j]["baz"]) < max_azi_gap or \
-                       abs(rec_data.iloc[i]["dist_deg"] - rec_data.iloc[j]["dist_deg"]) < max_dist_gap:
-                        self.rec_points_cs = self.rec_points_cs.append(
-                            {
+                    if abs(baz_values[i] - baz_values[j]) < max_azi_gap or \
+                       abs(dist_deg_values[i] - dist_deg_values[j]) < max_dist_gap:
+                        data_row = {
                                 "src_index": idx,
-                                "rec_index1": rec_data.iloc[i]["rec_index"],
-                                "staname1": rec_data.iloc[i]["staname"],
-                                "stla1": rec_data.iloc[i]["stla"],
-                                "stlo1": rec_data.iloc[i]["stlo"],
-                                "stel1": rec_data.iloc[i]["stel"],
-                                "rec_index2": rec_data.iloc[j]["rec_index"],
-                                "staname2": rec_data.iloc[j]["staname"],
-                                "stla2": rec_data.iloc[j]["stla"],
-                                "stlo2": rec_data.iloc[j]["stlo"],
-                                "stel2": rec_data.iloc[j]["stel"],
+                                "rec_index1": rec_indices[i],
+                                "staname1": stanames[i],
+                                "stla1": stlas[i],
+                                "stlo1": stlos[i],
+                                "stel1": stels[i],
+                                "rec_index2": rec_indices[j],
+                                "staname2": stanames[j],
+                                "stla2": stlas[j],
+                                "stlo2": stlos[j],
+                                "stel2": stels[j],
                                 "phase": "P,cs",
-                                "tt": rec_data.iloc[i]["tt"] - rec_data.iloc[j]["tt"],
+                                "tt": tts[i] - tts[j],
                                 "weight": 1.0,
-                            },
-                            ignore_index=True,
-                        )
+                            }
+                        # set src_index to index
+                        dd_data.append(data_row)
+        if dd_data:
+            self.rec_points_cs = pd.DataFrame(dd_data)
 
     def _generate_cr(self, max_azi_gap, max_dist_gap):
         names, _ = setup_rec_points_dd('cr')
         self.rec_points_cr = pd.DataFrame(columns=names)
-        for i, rec in self.receivers.iterrows():
+        
+        results = []
+        for i, rec in tqdm.tqdm(self.receivers.iterrows(), total=len(self.receivers)):
             rec_data = self.rec_points[self.rec_points["staname"] == rec["staname"]]
             if rec_data.shape[0] < 2:
                 continue
+
+            baz_values = rec_data['baz'].values
+            dist_deg_values = rec_data['dist_deg'].values
+            rec_indices = rec_data['rec_index'].values
+            src_indices = rec_data['src_index'].values
+            tts = rec_data['tt'].values
+
             for i in range(rec_data.shape[0]):
                 for j in range(i + 1, rec_data.shape[0]):
-                    if abs(rec_data.iloc[i]["baz"] - rec_data.iloc[j]["baz"]) < max_azi_gap or \
-                       abs(rec_data.iloc[i]["dist_deg"] - rec_data.iloc[j]["dist_deg"]) < max_dist_gap:
-                        self.rec_points_cr = self.rec_points_cr.append(
-                            {
-                                "src_index": rec_data.iloc[i]["src_index"],
-                                "rec_index": rec_data.iloc[i]["rec_index"],
-                                "staname": rec["staname"],
-                                "stla": rec["stla"],
-                                "stlo": rec["stlo"],
-                                "stel": rec["stel"],
-                                "event_id2": self.src_points.loc[rec_data.iloc[j]["src_index"]]["event_id"],
-                                "evla2": self.src_points.loc[rec_data.iloc[j]["src_index"]]["evla"],
-                                "evlo2": self.src_points.loc[rec_data.iloc[j]["src_index"]]["evlo"],
-                                "evdp2": self.src_points.loc[rec_data.iloc[j]["src_index"]]["evdp"],
-                                "phase": "P,cr",
-                                "tt": rec_data.iloc[i]["tt"] - rec_data.iloc[j]["tt"],
-                                "weight": 1.0,
-                            },
-                            ignore_index=True,
-                        )
+                    if abs(baz_values[i] - baz_values[j]) < max_azi_gap or \
+                    abs(dist_deg_values[i] - dist_deg_values[j]) < max_dist_gap:
+                        data_row = {
+                            "src_index": src_indices[i],
+                            "rec_index": rec_indices[i],
+                            "staname": rec["staname"],
+                            "stla": rec["stla"],
+                            "stlo": rec["stlo"],
+                            "stel": rec["stel"],
+                            "event_id2": self.src_points.loc[src_indices[j]]["event_id"],
+                            "evla2": self.src_points.loc[src_indices[j]]["evla"],
+                            "evlo2": self.src_points.loc[src_indices[j]]["evlo"],
+                            "evdp2": self.src_points.loc[src_indices[j]]["evdp"],
+                            "phase": "P,cr",
+                            "tt": tts[i] - tts[j],
+                            "weight": 1.0,
+                        }
+                        results.append(data_row)
+
+        if results:
+            self.rec_points_cr = pd.DataFrame(results)
 
     def _count_records(self):
         count = 0
