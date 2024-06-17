@@ -1056,6 +1056,7 @@ In this case, please set dist_in_data=True and read again."""
             stlos = rec_data['stlo'].values
             stels = rec_data['stel'].values
             tts = rec_data['tt'].values
+            phases = rec_data['phase'].values
             weights = rec_data['weight'].values
             for i in range(rec_data.shape[0]):
                 for j in range(i + 1, rec_data.shape[0]):
@@ -1073,7 +1074,7 @@ In this case, please set dist_in_data=True and read again."""
                                 "stla2": stlas[j],
                                 "stlo2": stlos[j],
                                 "stel2": stels[j],
-                                "phase": "P,cs",
+                                "phase": f"{phases[i]},cs",
                                 "tt": tts[i] - tts[j],
                                 "weight": (weights[i] + weights[j]) / 2,
                             }
@@ -1096,6 +1097,7 @@ In this case, please set dist_in_data=True and read again."""
             rec_indices = rec_data['rec_index'].values
             src_indices = rec_data['src_index'].values
             rec_weights = rec_data['weight'].values
+            rec_phases = rec_data['phase'].values
             tts = rec_data['tt'].values
             for i in range(rec_data.shape[0]):
                 for j in range(i + 1, rec_data.shape[0]):
@@ -1112,7 +1114,7 @@ In this case, please set dist_in_data=True and read again."""
                             "evla2": self.src_points.loc[src_indices[j]]["evla"],
                             "evlo2": self.src_points.loc[src_indices[j]]["evlo"],
                             "evdp2": self.src_points.loc[src_indices[j]]["evdp"],
-                            "phase": "P,cr",
+                            "phase": f"{rec_phases[i]},cr",
                             "tt": tts[i] - tts[j],
                             "weight": (self.src_points.loc[src_indices[j]]["weight"]+rec_weights[i])/2,
                         }
