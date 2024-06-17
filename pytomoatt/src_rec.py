@@ -1056,6 +1056,7 @@ In this case, please set dist_in_data=True and read again."""
             stlos = rec_data['stlo'].values
             stels = rec_data['stel'].values
             tts = rec_data['tt'].values
+            weights = rec_data['weight'].values
             for i in range(rec_data.shape[0]):
                 for j in range(i + 1, rec_data.shape[0]):
                     if abs(baz_values[i] - baz_values[j]) < max_azi_gap or \
@@ -1074,7 +1075,7 @@ In this case, please set dist_in_data=True and read again."""
                                 "stel2": stels[j],
                                 "phase": "P,cs",
                                 "tt": tts[i] - tts[j],
-                                "weight": 1.0,
+                                "weight": (weights[i] + weight[j])/2,
                             }
                         # set src_index to index
                         dd_data.append(data_row)
@@ -1090,13 +1091,12 @@ In this case, please set dist_in_data=True and read again."""
             rec_data = self.rec_points[self.rec_points["staname"] == rec["staname"]]
             if rec_data.shape[0] < 2:
                 continue
-
             baz_values = rec_data['baz'].values
             dist_deg_values = rec_data['dist_deg'].values
             rec_indices = rec_data['rec_index'].values
             src_indices = rec_data['src_index'].values
+            rec_weights = rec_data['weight'].values
             tts = rec_data['tt'].values
-
             for i in range(rec_data.shape[0]):
                 for j in range(i + 1, rec_data.shape[0]):
                     if abs(baz_values[i] - baz_values[j]) < max_azi_gap or \
@@ -1114,7 +1114,7 @@ In this case, please set dist_in_data=True and read again."""
                             "evdp2": self.src_points.loc[src_indices[j]]["evdp"],
                             "phase": "P,cr",
                             "tt": tts[i] - tts[j],
-                            "weight": 1.0,
+                            "weight": (self.src_points.loc[src_indices[j]]["weight"]+rec_weights[i])/2,
                         }
                         results.append(data_row)
 
