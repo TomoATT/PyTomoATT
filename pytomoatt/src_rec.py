@@ -1017,6 +1017,8 @@ In this case, please set dist_in_data=True and read again."""
         :type max_azi_gap: float, optional
         :param max_dist_gap: Maximum distance gap for selecting events, defaults to 2.5
         :type max_dist_gap: float, optional
+        :param recalc_baz: Recalculate azimuth and back azimuth, defaults to False
+        :type recalc_baz: bool, optional
 
         ``self.rec_points_cr`` or ``self.rec_points_cs`` are generated
         """
