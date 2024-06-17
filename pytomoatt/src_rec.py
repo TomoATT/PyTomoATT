@@ -1075,7 +1075,7 @@ In this case, please set dist_in_data=True and read again."""
                                 "stel2": stels[j],
                                 "phase": "P,cs",
                                 "tt": tts[i] - tts[j],
-                                "weight": (weights[i] + weight[j])/2,
+                                "weight": (weights[i] + weights[j]) / 2,
                             }
                         # set src_index to index
                         dd_data.append(data_row)
