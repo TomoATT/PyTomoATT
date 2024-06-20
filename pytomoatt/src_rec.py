@@ -1160,8 +1160,21 @@ In this case, please set dist_in_data=True and read again."""
                 scale
             )
             # apply weights to rec_points
-            for staname, weight in zip(self.receivers['staname'], weights):
-                self.rec_points.loc[self.rec_points['staname'] == staname, 'weight'] = weight
+            self.receivers['weight'] = weights
+            for i, row in self.receivers.iterrows():
+                self.rec_points.loc[self.rec_points['staname'] == row['staname'], 'weight'] = row['weight']
+            
+            if not self.rec_points_cs.empty:
+                for i, row in self.rec_points_cs.iterrows():
+                    w1 = self.receivers.loc[self.receivers['staname'] == row['staname1'], 'weight'].values[0]
+                    w2 = self.receivers.loc[self.receivers['staname'] == row['staname2'], 'weight'].values[0]
+                    self.rec_points_cs.loc[i, 'weight'] = (w1 + w2) / 2
+            
+            if not self.rec_points_cr.empty:
+                for i, row in self.rec_points_cr.iterrows():
+                    w1 = self.receivers.loc[self.receivers['staname'] == row['staname'], 'weight'].values[0]
+                    w2 = self.src_points.loc[self.src_points['event_id'] == row['event_id2'], 'weight'].values[0]
+                    self.rec_points_cr.loc[i, 'weight'] = (w1 + w2) / 2
 
     def add_noise(self, range_in_sec=0.1, mean_in_sec=0.0, shape="gaussian"):
         """Add random noise on travel time
@@ -1185,6 +1198,10 @@ In this case, please set dist_in_data=True and read again."""
                 loc=mean_in_sec, scale=range_in_sec, size=self.rec_points.shape[0]
             )
         self.rec_points["tt"] += noise
+        if not self.rec_points_cs.empty:
+            self.rec_points_cs["tt"] += noise
+        if not self.rec_points_cr.empty:
+            self.rec_points_cr["tt"] += noise
 
     def write_receivers(self, fname: str):
         """
