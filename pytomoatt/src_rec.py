@@ -1203,6 +1203,47 @@ In this case, please set dist_in_data=True and read again."""
         if not self.rec_points_cr.empty:
             self.rec_points_cr["tt"] += noise
 
+    def rotate(self, clat:float, clon:float, angle:float):
+        """Rotate sources and receivers around a center point
+
+        :param clat: Latitude of the center
+        :type clat: float
+        :param clon: Longitude of the center
+        :type clon: float
+        :param angle: anti-clockwise angle in degree
+        :type angle: float
+        """
+        from .utils.rotate import rtp_rotation
+
+        self.sources["evla"], self.sources["evlo"] = rtp_rotation(
+            self.sources["evla"], self.sources["evlo"], clat, clon, angle
+        )
+        for i, row in self.src_points.iterrows():
+            self.src_points.loc[i, "evla"], self.src_points.loc[i, "evlo"] = rtp_rotation(
+                row["evla"], row["evlo"], clat, clon, angle
+            )
+
+        self.receivers["stla"], self.receivers["stlo"] = rtp_rotation(
+            self.receivers["stla"], self.receivers["stlo"], clat, clon, angle
+        )
+        for i, row in self.rec_points.iterrows():
+            self.rec_points.loc[i, "stla"] = self.receivers[self.receivers["staname"] == row["staname"]]["stla"]
+            self.rec_points.loc[i, "stlo"] = self.receivers[self.receivers["staname"] == row["staname"]]["stlo"]
+        
+        if not self.rec_points_cs.empty:
+            for i, row in self.rec_points_cs.iterrows():
+                self.rec_points_cs.loc[i, "stla1"] = self.receivers[self.receivers["staname"] == row["staname1"]]["stla"]
+                self.rec_points_cs.loc[i, "stlo1"] = self.receivers[self.receivers["staname"] == row["staname1"]]["stlo"]
+                self.rec_points_cs.loc[i, "stla2"] = self.receivers[self.receivers["staname"] == row["staname2"]]["stla"]
+                self.rec_points_cs.loc[i, "stlo2"] = self.receivers[self.receivers["staname"] == row["staname2"]]["stlo"]
+        
+        if not self.rec_points_cr.empty:
+            for i, row in self.rec_points_cr.iterrows():
+                self.rec_points_cr.loc[i, "stla"] = self.receivers[self.receivers["staname"] == row["staname"]]["stla"]
+                self.rec_points_cr.loc[i, "stlo"] = self.receivers[self.receivers["staname"] == row["staname"]]["stlo"]
+                self.rec_points_cr.loc[i, "evla2"] = self.sources[self.sources["event_id"] == row["event_id2"]]["evla"]
+                self.rec_points_cr.loc[i, "evlo2"] = self.sources[self.sources["event_id"] == row["event_id2"]]["evlo"]
+
     def write_receivers(self, fname: str):
         """
         Write receivers to a txt file.
