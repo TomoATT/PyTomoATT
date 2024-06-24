@@ -115,6 +115,80 @@ class SrcRec:
         else:
             raise TypeError("rec_points should be in DataFrame")
 
+    @property
+    def rec_points_cs(self):
+        """Return a DataFrame of all common sources
+
+        :return: All common sources
+        :rtype: pandas.DataFrame
+
+        Common sources contain 14 columns:
+
+        ================ =====================================================
+        Column            Description
+        ================ =====================================================
+        ``src_index``    Index of source recorded by the receiver
+        ``rec_index1``   Index of receivers that recorded the same source
+        ``staname1``     Name of the receiver
+        ``stla1``        Latitude of the receiver
+        ``stlo1``        Longitude of the receiver
+        ``stel1``        Elevation of the receiver
+        ``rec_index2``   Index of the source recorded by the receiver
+        ``staname2``     Name of the receiver
+        ``stla2``        Latitude of the receiver
+        ``stlo2``        Longitude of the receiver
+        ``stel2``        Elevation of the receiver
+        ``phase``        Phase name
+        ``tt``           Travel time of the source receiver pair
+        ``weight``       Weight of the receiver applied on objective function
+        ================ =====================================================
+        """
+        return self._rec_points_cs
+    
+    @rec_points_cs.setter
+    def rec_points_cs(self, value):
+        if value is None or isinstance(value, pd.DataFrame):
+            self._rec_points_cs = value
+        else:
+            raise TypeError("rec_points_cs should be in DataFrame")
+
+    @property
+    def rec_points_cr(self):
+        """Return a DataFrame of all common receivers
+
+        :return: All common receivers
+        :rtype: pandas.DataFrame
+
+        Common receivers contain 13 columns:
+
+        ================ =====================================================
+        Column            Description
+        ================ =====================================================
+        ``src_index``    Index of source recorded by the receiver
+        ``rec_index``    Index of receivers that recorded the same source
+        ``staname``      Name of the receiver
+        ``stla``         Latitude of the receiver
+        ``stlo``         Longitude of the receiver
+        ``stel``         Elevation of the receiver
+        ``src_index2``   Index of the source recorded by the receiver
+        ``event_id2``    ID of the source
+        ``evla2``        Latitude of the source
+        ``evlo2``        Longitude of the source
+        ``evdp2``        Focal depth
+        ``phase``        Phase name
+        ``tt``           Travel time of the source receiver pair
+        ``weight``       Weight of the receiver applied on objective function
+        ================ =====================================================
+        """
+        return self._rec_points_cr
+
+    @rec_points_cr.setter
+    def rec_points_cr(self, value):
+        if value is None or isinstance(value, pd.DataFrame):
+            self._rec_points_cr = value
+        else:
+            raise TypeError("rec_points_cr should be in DataFrame")
+
     @classmethod
     def read(cls, fname: str, dist_in_data=False, name_net_and_sta=False, **kwargs):
         """Read source <--> receiver file to pandas.DataFrame
