@@ -13,6 +13,8 @@ pytomoatt.src_rec
 
   ~SrcRec.src_points
   ~SrcRec.rec_points
+  ~SrcRec.rec_points_cs
+  ~SrcRec.rec_points_cr
 
 .. rubric:: Method
 
@@ -22,8 +24,10 @@ pytomoatt.src_rec
 
   ~SrcRec.read
   ~SrcRec.write
-  ~SrcRec.reset_index
   ~SrcRec.append
+  ~SrcRec.generate_double_difference
+  ~SrcRec.update
+  ~SrcRec.reset_index
   ~SrcRec.remove_rec_by_new_src
   ~SrcRec.remove_src_by_new_rec
   ~SrcRec.update_num_rec
