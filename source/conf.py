@@ -11,7 +11,7 @@ import os
 project = 'PyTomoATT'
 copyright = '2023, Mijian Xu'
 author = 'Mijian Xu'
-release = '0.1.4'
+release = '0.1.8'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -26,9 +26,6 @@ extensions = ['sphinx.ext.githubpages',
               "sphinx.ext.mathjax",
               "sphinx.ext.todo",
               "sphinx.ext.viewcode",
-            #   "sphinxcontrib.icon",
-            #   "sphinx_gallery.gen_gallery",
-            #   'sphinxcontrib.bibtex',
 ]
 
 
@@ -79,7 +76,8 @@ copybutton_only_copy_prompt_lines = True
 copybutton_remove_prompts = True
 
 
-jupyter_execute_notebooks = "cache"
+# jupyter_execute_notebooks = "cache"
+nb_execution_mode = "cache"
 html_extra_path = []
 html_title = project
 html_css_files = ["custom.css"]
