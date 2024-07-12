@@ -22,12 +22,12 @@ class SrcRec:
     def __init__(self, fname: str, src_only=False) -> None:
         """ """
         self.src_only = src_only
-        self.src_points = None
-        self.rec_points = None
+        self.src_points = pd.DataFrame()
+        self.rec_points = pd.DataFrame()
         self.rec_points_cr = pd.DataFrame()
         self.rec_points_cs = pd.DataFrame()
-        self.sources = None
-        self.receivers = None
+        self.sources = pd.DataFrame()
+        self.receivers = pd.DataFrame()
         self.fnames = [fname]
         self.log = SetupLog()
 
@@ -66,6 +66,7 @@ class SrcRec:
     def src_points(self, value):
         if value is None or isinstance(value, pd.DataFrame):
             self._src_points = value
+            self._src_points.index.name = "src_index"
         else:
             raise TypeError("src_points should be in DataFrame")
 
@@ -370,7 +371,9 @@ In this case, please set dist_in_data=True and read again."""
         """
         with open(fname, "w") as f:
             for idx, src in tqdm.tqdm(
-                self.src_points.iterrows(), total=len(self.src_points)
+                self.src_points.iterrows(),
+                total=len(self.src_points),
+                desc="Writing src_rec file",
             ):
                 time_lst = (
                     src["origin_time"].strftime("%Y_%m_%d_%H_%M_%S.%f").split("_")
@@ -662,8 +665,10 @@ In this case, please set dist_in_data=True and read again."""
         # sort by src_index
         self.src_points.sort_values(by=["src_index"], inplace=True)
         self.rec_points.sort_values(by=["src_index", "rec_index"], inplace=True)
-        self.rec_points_cr.sort_values(by=["src_index", "rec_index"], inplace=True)
-        self.rec_points_cs.sort_values(by=["src_index", "rec_index1"], inplace=True)
+        if not self.rec_points_cr.empty:
+            self.rec_points_cr.sort_values(by=["src_index", "rec_index"], inplace=True)
+        if not self.rec_points_cs.empty:
+            self.rec_points_cs.sort_values(by=["src_index", "rec_index1"], inplace=True)
 
     def erase_src_with_no_rec(self):
         """
@@ -1120,7 +1125,8 @@ In this case, please set dist_in_data=True and read again."""
         src = self.rec_points.groupby("src_index")
         dd_data = []
         for idx, rec_data in tqdm.tqdm(
-                src, total=len(src)
+                src, total=len(src),
+                desc="Generating cs",
             ):
             if rec_data.shape[0] < 2:
                 continue
@@ -1136,7 +1142,7 @@ In this case, please set dist_in_data=True and read again."""
             weights = rec_data['weight'].values
             for i in range(rec_data.shape[0]):
                 for j in range(i + 1, rec_data.shape[0]):
-                    if abs(baz_values[i] - baz_values[j]) < max_azi_gap or \
+                    if abs(baz_values[i] - baz_values[j]) < max_azi_gap and \
                        abs(dist_deg_values[i] - dist_deg_values[j]) < max_dist_gap:
                         data_row = {
                                 "src_index": idx,
@@ -1162,9 +1168,17 @@ In this case, please set dist_in_data=True and read again."""
     def _generate_cr(self, max_azi_gap, max_dist_gap):
         names, _ = setup_rec_points_dd('cr')
         self.rec_points_cr = pd.DataFrame(columns=names)
-        
+        src_id = self.src_points["event_id"].values
+        src_la = self.src_points["evla"].values
+        src_lo = self.src_points["evlo"].values
+        src_dp = self.src_points["evdp"].values
+        src_weights = self.src_points["weight"].values
         results = []
-        for i, rec in tqdm.tqdm(self.receivers.iterrows(), total=len(self.receivers)):
+        for i, rec in tqdm.tqdm(
+                self.receivers.iterrows(),
+                total=len(self.receivers),
+                desc="Generating cr"
+            ):
             rec_data = self.rec_points[self.rec_points["staname"] == rec["staname"]]
             if rec_data.shape[0] < 2:
                 continue
@@ -1177,8 +1191,8 @@ In this case, please set dist_in_data=True and read again."""
             tts = rec_data['tt'].values
             for i in range(rec_data.shape[0]):
                 for j in range(i + 1, rec_data.shape[0]):
-                    if abs(baz_values[i] - baz_values[j]) < max_azi_gap or \
-                    abs(dist_deg_values[i] - dist_deg_values[j]) < max_dist_gap:
+                    if abs(baz_values[i] - baz_values[j]) < max_azi_gap and \
+                       abs(dist_deg_values[i] - dist_deg_values[j]) < max_dist_gap:
                         data_row = {
                             "src_index": src_indices[i],
                             "rec_index": rec_indices[i],
@@ -1186,13 +1200,13 @@ In this case, please set dist_in_data=True and read again."""
                             "stla": rec["stla"],
                             "stlo": rec["stlo"],
                             "stel": rec["stel"],
-                            "event_id2": self.src_points.loc[src_indices[j]]["event_id"],
-                            "evla2": self.src_points.loc[src_indices[j]]["evla"],
-                            "evlo2": self.src_points.loc[src_indices[j]]["evlo"],
-                            "evdp2": self.src_points.loc[src_indices[j]]["evdp"],
+                            "event_id2": src_id[j],
+                            "evla2": src_la[j],
+                            "evlo2": src_lo[j],
+                            "evdp2": src_dp[j],
                             "phase": f"{rec_phases[i]},cr",
                             "tt": tts[i] - tts[j],
-                            "weight": (self.src_points.loc[src_indices[j]]["weight"]+rec_weights[i])/2,
+                            "weight": (src_weights[j]+rec_weights[i])/2,
                         }
                         results.append(data_row)
 
