@@ -66,6 +66,18 @@ class SrcRec:
     def src_points(self, value):
         if value is None or isinstance(value, pd.DataFrame):
             self._src_points = value
+            if not self._src_points.empty:
+                self._src_points = self._src_points.astype(
+                    {
+                        "evla": float,
+                        "evlo": float,
+                        "evdp": float,
+                        "mag": float,
+                        "num_rec": int,
+                        "event_id": str,
+                        "weight": float,
+                    }
+                )
             self._src_points.index.name = "src_index"
         else:
             raise TypeError("src_points should be in DataFrame")
@@ -643,9 +655,11 @@ In this case, please set dist_in_data=True and read again."""
         """
         self.src_points["num_rec"] = self.rec_points.groupby("src_index").size()
         if not self.rec_points_cr.empty:
-            self.src_points["num_rec"] += self.rec_points_cr.groupby("src_index").size()
+            num = self.rec_points_cr.groupby("src_index").size()
+            self.src_points.loc[num.index, "num_rec"] += num
         if not self.rec_points_cs.empty:
-            self.src_points["num_rec"] += self.rec_points_cs.groupby("src_index").size()
+            num = self.rec_points_cs.groupby("src_index").size()
+            self.src_points.loc[num.index, "num_rec"] += num
 
     def update(self):
         """
