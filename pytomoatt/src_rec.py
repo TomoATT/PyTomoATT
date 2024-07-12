@@ -67,17 +67,20 @@ class SrcRec:
         if value is None or isinstance(value, pd.DataFrame):
             self._src_points = value
             if not self._src_points.empty:
-                self._src_points = self._src_points.astype(
-                    {
-                        "evla": float,
-                        "evlo": float,
-                        "evdp": float,
-                        "mag": float,
-                        "num_rec": int,
-                        "event_id": str,
-                        "weight": float,
-                    }
-                )
+                try:
+                    self._src_points = self._src_points.astype(
+                        {
+                            "evla": float,
+                            "evlo": float,
+                            "evdp": float,
+                            "mag": float,
+                            "num_rec": int,
+                            "event_id": str,
+                            "weight": float,
+                        }
+                    )
+                except:
+                    pass
             self._src_points.index.name = "src_index"
         else:
             raise TypeError("src_points should be in DataFrame")
