@@ -16,6 +16,8 @@ PyTomoATT is a Python module that provides an interface for [TomoATT](https://mi
 :hidden:
 
 installation
+usages/model.md
+usages/ckb.md
 
 ```
 

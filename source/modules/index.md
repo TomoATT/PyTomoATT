@@ -6,7 +6,7 @@
 para
 src_rec/src_rec
 data
-attarray
 model
+attarray
 checkerboard
 ```
