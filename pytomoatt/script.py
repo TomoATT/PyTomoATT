@@ -81,7 +81,7 @@ The pta commands include:
                             default='0/1/2/3', metavar='ncol_lon/ncol_lat/ncol_dep/ncol_vel')
         parser.add_argument('-o', help='Path to output model, defaults to Sub_CRUST1.0_nr_nt_np.h5', default=None, metavar='fname')
         parser.add_argument('-s', help='Smooth the 3D model with a Gaussian filter,' 
-                            'Sigma is the standard division of the smoothing kernel, defaults to None',
+                            'Sigma is the standard division of the smoothing kernel in km, defaults to None',
                             default=None, type=float, metavar='sigma')
         parser.add_argument('-t', help='Type of velocity vp or vs are available, valid for -m1', default='vp', metavar='vel_type')
         args = parser.parse_args(sys.argv[2:])
