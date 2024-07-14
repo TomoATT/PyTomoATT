@@ -47,12 +47,26 @@ class TestSrcRec:
         sr = SrcRec.read(self.fname)
         sr.select_by_phase('P')
 
+    def test_subcase_09(self):
+        sr = SrcRec.read(self.fname)
+        sr.generate_double_difference('cs', max_azi_gap=15, max_dist_gap=1.4)
+        sr.generate_double_difference('cr', max_azi_gap=15, max_dist_gap=0.01)
+
+    def test_subcase_10(self):
+        sr = SrcRec.read(self.fname)
+        sr.box_weighting(0.4, 10, obj='both')
+
 if __name__ == '__main__':
     tsr = TestSrcRec()
     tsr.test_subcase_01()
     tsr.test_subcase_02()
+    tsr.test_subcase_03()
+    tsr.test_subcase_04()
     tsr.test_subcase_05()
     tsr.test_subcase_06()
     tsr.test_subcase_07()
+    tsr.test_subcase_08()
+    tsr.test_subcase_09()
+    tsr.test_subcase_10()
 
 

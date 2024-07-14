@@ -1129,7 +1129,7 @@ In this case, please set dist_in_data=True and read again."""
         :type d_km: float
         """
         self.log.SrcReclog.info(
-            "Box weighting: d_deg={}, d_km={}".format(d_deg, d_km)
+            "Box weighting for sources: d_deg={}, d_km={}".format(d_deg, d_km)
         )
 
         # group events by grid size
@@ -1155,7 +1155,7 @@ In this case, please set dist_in_data=True and read again."""
         :type d_deg: float
         """
         self.log.SrcReclog.info(
-            "Box weighting: d_deg={}".format(d_deg)
+            "Box weighting for receivers: d_deg={}".format(d_deg)
         )
 
         # group events by grid size
@@ -1308,6 +1308,9 @@ In this case, please set dist_in_data=True and read again."""
                         dd_data.append(data_row)
         if dd_data:
             self.rec_points_cs = pd.DataFrame(dd_data)
+        self.log.SrcReclog.info(
+            "rec_points_cs after generation: {}".format(self.rec_points_cs.shape)
+        )
 
     def _generate_cr(self, max_azi_gap, max_dist_gap):
         names, _ = setup_rec_points_dd('cr')
@@ -1335,6 +1338,7 @@ In this case, please set dist_in_data=True and read again."""
             tts = rec_data['tt'].values
             for i in range(rec_data.shape[0]):
                 for j in range(i + 1, rec_data.shape[0]):
+                    src_index = src_indices[j]
                     if abs(baz_values[i] - baz_values[j]) < max_azi_gap and \
                        abs(dist_deg_values[i] - dist_deg_values[j]) < max_dist_gap:
                         data_row = {
@@ -1344,18 +1348,22 @@ In this case, please set dist_in_data=True and read again."""
                             "stla": rec["stla"],
                             "stlo": rec["stlo"],
                             "stel": rec["stel"],
-                            "event_id2": src_id[j],
-                            "evla2": src_la[j],
-                            "evlo2": src_lo[j],
-                            "evdp2": src_dp[j],
+                            "src_index2": src_index,
+                            "event_id2": src_id[src_index],
+                            "evla2": src_la[src_index],
+                            "evlo2": src_lo[src_index],
+                            "evdp2": src_dp[src_index],
                             "phase": f"{rec_phases[i]},cr",
                             "tt": tts[i] - tts[j],
-                            "weight": (src_weights[j]+rec_weights[i])/2,
+                            "weight": (src_weights[src_index]+rec_weights[i])/2,
                         }
                         results.append(data_row)
 
         if results:
             self.rec_points_cr = pd.DataFrame(results)
+        self.log.SrcReclog.info(
+            "rec_points_cr after generation: {}".format(self.rec_points_cr.shape)
+        )
 
     def _count_records(self):
         count = 0
@@ -1418,10 +1426,11 @@ In this case, please set dist_in_data=True and read again."""
         :param shape: shape of the noise distribution probability
         :type shape: str. options: gaussian or uniform
         """
+        self.log.SrcReclog.info(f"Adding {shape} noise to travel time data...")
         for rec_type in [self.rec_points, self.rec_points_cs, self.rec_points_cr]:
             if rec_type.empty:
                 continue
-            if rec_type in [self.rec_points_cs, self.rec_points_cr]:
+            if rec_type.equals(self.rec_points_cs) or rec_type.equals(self.rec_points_cr):
                 range_in_sec = range_in_sec * np.sqrt(2)
             if shape == "uniform":
                 noise = np.random.uniform(
