@@ -6,7 +6,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 setup(name='PyTomoATT',
       version=VERSION,
       author='Mijian Xu, Masaru Nagaso',
