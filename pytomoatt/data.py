@@ -2,7 +2,6 @@ import numpy as np
 import h5py
 from .para import ATTPara
 from .attarray import Dataset
-from .utils import asind, acosd
 
 
 class ATTData():
@@ -74,9 +73,9 @@ class ATTData():
             attdata.fgrid = np.loadtxt(fname_grid)
         if isinstance(dataset_name, str) and attdata.format == 'hdf5':
             attdata._add_field(dataset_name)
-            attdata.__dict__[key], attdata.grid_glob_r, \
+            attdata.__dict__[dataset_name], attdata.grid_glob_r, \
             attdata.grid_glob_t, attdata.grid_glob_p = \
-            attdata._data_retrieval(group_name=group_name, dataset_name=key)
+            attdata._data_retrieval(group_name=group_name, dataset_name=dataset_name)
         elif isinstance(dataset_name, str) and attdata.format != 'hdf5':
             attdata._add_field('data')
             attdata.data, attdata.grid_glob_r, attdata.grid_glob_t, attdata.grid_glob_p = \

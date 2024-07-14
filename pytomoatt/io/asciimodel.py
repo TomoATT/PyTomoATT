@@ -1,5 +1,5 @@
 import numpy as np
-from ..utils import init_axis, ignore_nan_3d
+from ..utils.common import init_axis, ignore_nan_3d
 from ..setuplog import SetupLog
 from scipy.interpolate import griddata
 

@@ -1,6 +1,6 @@
 import h5py
 import numpy as np
-from .utils import init_axis, sind, cosd
+from .utils.common import init_axis, sind, cosd
 import copy
 
 
