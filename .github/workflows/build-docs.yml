@@ -5,7 +5,7 @@ name: Build documentations
 
 on:
   push:
-    branches: [ "docs", "devel" ]
+    branches: [ "docs" ]
   workflow_call:
     inputs:
       config-path:

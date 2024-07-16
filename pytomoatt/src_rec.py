@@ -1030,6 +1030,29 @@ In this case, please set dist_in_data=True and read again."""
             "rec_points after selection: {}".format(self._count_records())
         )
 
+    def _evt_group(self, d_deg: float, d_km: float):
+        """group events by grid size
+
+        :param d_deg: grid size along lat and lon in degree
+        :type d_deg: float
+        :param d_km: grid size along depth axis in km
+        :type d_km: float
+        """
+        # add 'lat_group' and 'lon_group' to src_points by module d_deg
+        self.src_points["lat_group"] = self.src_points["evla"].apply(
+            lambda x: int(x / d_deg)
+        )
+        self.src_points["lon_group"] = self.src_points["evlo"].apply(
+            lambda x: int(x / d_deg)
+        )
+        self.src_points["dep_group"] = self.src_points["evdp"].apply(
+            lambda x: int(x / d_km)
+        )
+        # sort src_points by 'lat_group' and 'lon_group' and 'dep_group'
+        self.src_points = self.src_points.sort_values(
+            by=["lat_group", "lon_group", "dep_group"]
+        )
+
     def select_one_event_in_each_subgrid(self, d_deg: float, d_km: float):
         """select one event in each subgrid
 
@@ -1042,28 +1065,13 @@ In this case, please set dist_in_data=True and read again."""
         self.log.SrcReclog.info(
             "src_points before selection: {}".format(self.src_points.shape[0])
         )
-        self.log.SrcReclog.info("processing... (this may take a few minutes)")
+        # self.log.SrcReclog.info("processing... (this may take a few minutes)")
 
         # store index of src_points as 'src_index'
-        self.src_points["src_index"] = self.src_points.index
-
-        # add 'lat_group' and 'lon_group' to src_points by module d_deg
-        self.src_points["lat_group"] = self.src_points["evla"].apply(
-            lambda x: int(x / d_deg)
-        )
-        self.src_points["lon_group"] = self.src_points["evlo"].apply(
-            lambda x: int(x / d_deg)
-        )
-
-        # add 'dep_group' to src_points by module d_km
-        self.src_points["dep_group"] = self.src_points["evdp"].apply(
-            lambda x: int(x / d_km)
-        )
-
-        # sort src_points by 'lat_group' and 'lon_group' and 'dep_group'
-        self.src_points = self.src_points.sort_values(
-            by=["lat_group", "lon_group", "dep_group"]
-        )
+        # self.src_points["src_index"] = self.src_points.index
+        
+        # group events by grid size
+        self._evt_group(d_deg, d_km)
 
         # find all events in the same lat_group and lon_group and dep_group
         # and keep only on with largest nrec
@@ -1089,6 +1097,125 @@ In this case, please set dist_in_data=True and read again."""
         # remove rec_points by new src_points
         # self.remove_rec_by_new_src()
         self.update()
+
+    def box_weighting(self, d_deg: float, d_km: float, obj="both"):
+        """Weighting sources and receivers by number in each subgrid
+
+        :param d_deg: grid size along lat and lon in degree
+        :type d_deg: float
+        :param d_km: grid size along depth axis in km, (only used when obj='src' or 'both')
+        :type d_km: float
+        :param obj: Object to be weighted, options: ``src``, ``rec`` or ``both``, defaults to ``both``
+        :type obj: str, optional
+        """
+        if obj == "src":
+            self._box_weighting_ev(d_deg, d_km)
+        elif obj == "rec":
+            self._box_weighting_st(d_deg)
+        elif obj == "both":
+            self._box_weighting_ev(d_deg, d_km)
+            self._box_weighting_st(d_deg)
+        else:
+            self.log.SrcReclog.error(
+                "Only 'src', 'rec' or 'both' are supported for obj"
+            )
+
+    def _box_weighting_ev(self, d_deg: float, d_km: float):
+        """Weighting sources by number of sources in each subgrid
+
+        :param d_deg: grid size along lat and lon in degree
+        :type d_deg: float
+        :param d_km: grid size along depth axis in km
+        :type d_km: float
+        """
+        self.log.SrcReclog.info(
+            "Box weighting for sources: d_deg={}, d_km={}".format(d_deg, d_km)
+        )
+
+        # group events by grid size
+        self._evt_group(d_deg, d_km)
+
+        # count num of sources in the same lat_group and lon_group and dep_group
+        self.src_points["num_sources"] = self.src_points.groupby(
+            ["lat_group", "lon_group", "dep_group"]
+        )["lat_group"].transform("count")
+
+        # calculate weight for each event
+        self.src_points["weight"] = 1 / np.sqrt(self.src_points["num_sources"])
+
+        # drop 'lat_group' and 'lon_group' and 'dep_group'
+        self.src_points = self.src_points.drop(
+            columns=["lat_group", "lon_group", "dep_group", "num_sources"]
+        )
+
+    def _box_weighting_st(self, d_deg: float):
+        """Weighting receivers by number of sources in each subgrid
+
+        :param d_deg: grid size along lat and lon in degree
+        :type d_deg: float
+        """
+        self.log.SrcReclog.info(
+            "Box weighting for receivers: d_deg={}".format(d_deg)
+        )
+
+        # group events by grid size
+        self.receivers["lat_group"] = self.receivers["stla"].apply(
+            lambda x: int(x / d_deg)
+        )
+        self.receivers["lon_group"] = self.receivers["stlo"].apply(
+            lambda x: int(x / d_deg)
+        )
+
+        # count num of sources in the same lat_group and lon_group
+        self.receivers["num_receivers"] = self.receivers.groupby(
+            ["lat_group", "lon_group"]
+        )["lat_group"].transform("count")
+
+        # calculate weight for each event
+        self.receivers["weight"] = 1 / np.sqrt(self.receivers["num_receivers"])
+
+        # assign weight to rec_points
+        self.rec_points["weight"] = self.rec_points.apply(
+            lambda x: self.receivers[
+                (self.receivers["staname"] == x["staname"])
+            ]["weight"].values[0],
+            axis=1,
+        )
+
+        # assign weight to rec_points_cs
+        # the weight is the average of the two receivers
+        if not self.rec_points_cs.empty:
+            self.rec_points_cs["weight"] = self.rec_points_cs.apply(
+                lambda x: np.mean([
+                    self.receivers[
+                        (self.receivers["staname"] == x["staname1"])
+                    ]["weight"].values[0],
+                    self.receivers[
+                        (self.receivers["staname"] == x["staname2"])
+                    ]["weight"].values[0]
+                ]),
+                axis=1,
+            )
+        
+        # assign weight to rec_points_cr
+        # the weight is the average of the one receiver and the other source
+        if not self.rec_points_cr.empty:
+            self.rec_points_cr["weight"] = self.rec_points_cr.apply(
+                lambda x: np.mean([
+                    self.receivers[
+                        (self.receivers["staname"] == x["staname"])
+                    ]["weight"].values[0],
+                    self.src_points[
+                        (self.src_points["event_id"] == x["event_id2"])
+                    ]["weight"].values[0]
+                ]),
+                axis=1,
+            )
+
+        # drop 'lat_group' and 'lon_group'
+        self.receivers = self.receivers.drop(
+            columns=["lat_group", "lon_group", "num_receivers"]
+        )
 
     def count_events_per_station(self):
         """
@@ -1162,25 +1289,28 @@ In this case, please set dist_in_data=True and read again."""
                     if abs(baz_values[i] - baz_values[j]) < max_azi_gap and \
                        abs(dist_deg_values[i] - dist_deg_values[j]) < max_dist_gap:
                         data_row = {
-                                "src_index": idx,
-                                "rec_index1": rec_indices[i],
-                                "staname1": stanames[i],
-                                "stla1": stlas[i],
-                                "stlo1": stlos[i],
-                                "stel1": stels[i],
-                                "rec_index2": rec_indices[j],
-                                "staname2": stanames[j],
-                                "stla2": stlas[j],
-                                "stlo2": stlos[j],
-                                "stel2": stels[j],
-                                "phase": f"{phases[i]},cs",
-                                "tt": tts[i] - tts[j],
-                                "weight": (weights[i] + weights[j]) / 2,
-                            }
+                            "src_index": idx,
+                            "rec_index1": rec_indices[i],
+                            "staname1": stanames[i],
+                            "stla1": stlas[i],
+                            "stlo1": stlos[i],
+                            "stel1": stels[i],
+                            "rec_index2": rec_indices[j],
+                            "staname2": stanames[j],
+                            "stla2": stlas[j],
+                            "stlo2": stlos[j],
+                            "stel2": stels[j],
+                            "phase": f"{phases[i]},cs",
+                            "tt": tts[i] - tts[j],
+                            "weight": (weights[i] + weights[j]) / 2,
+                        }
                         # set src_index to index
                         dd_data.append(data_row)
         if dd_data:
             self.rec_points_cs = pd.DataFrame(dd_data)
+        self.log.SrcReclog.info(
+            "rec_points_cs after generation: {}".format(self.rec_points_cs.shape)
+        )
 
     def _generate_cr(self, max_azi_gap, max_dist_gap):
         names, _ = setup_rec_points_dd('cr')
@@ -1208,6 +1338,7 @@ In this case, please set dist_in_data=True and read again."""
             tts = rec_data['tt'].values
             for i in range(rec_data.shape[0]):
                 for j in range(i + 1, rec_data.shape[0]):
+                    src_index = src_indices[j]
                     if abs(baz_values[i] - baz_values[j]) < max_azi_gap and \
                        abs(dist_deg_values[i] - dist_deg_values[j]) < max_dist_gap:
                         data_row = {
@@ -1217,18 +1348,22 @@ In this case, please set dist_in_data=True and read again."""
                             "stla": rec["stla"],
                             "stlo": rec["stlo"],
                             "stel": rec["stel"],
-                            "event_id2": src_id[j],
-                            "evla2": src_la[j],
-                            "evlo2": src_lo[j],
-                            "evdp2": src_dp[j],
+                            "src_index2": src_index,
+                            "event_id2": src_id[src_index],
+                            "evla2": src_la[src_index],
+                            "evlo2": src_lo[src_index],
+                            "evdp2": src_dp[src_index],
                             "phase": f"{rec_phases[i]},cr",
                             "tt": tts[i] - tts[j],
-                            "weight": (src_weights[j]+rec_weights[i])/2,
+                            "weight": (src_weights[src_index]+rec_weights[i])/2,
                         }
                         results.append(data_row)
 
         if results:
             self.rec_points_cr = pd.DataFrame(results)
+        self.log.SrcReclog.info(
+            "rec_points_cr after generation: {}".format(self.rec_points_cr.shape)
+        )
 
     def _count_records(self):
         count = 0
@@ -1291,22 +1426,21 @@ In this case, please set dist_in_data=True and read again."""
         :param shape: shape of the noise distribution probability
         :type shape: str. options: gaussian or uniform
         """
-        if shape == "uniform":
-            noise = (
-                np.random.uniform(
-                    low=-range_in_sec, high=range_in_sec, size=self.rec_points.shape[0]
+        self.log.SrcReclog.info(f"Adding {shape} noise to travel time data...")
+        for rec_type in [self.rec_points, self.rec_points_cs, self.rec_points_cr]:
+            if rec_type.empty:
+                continue
+            if rec_type.equals(self.rec_points_cs) or rec_type.equals(self.rec_points_cr):
+                range_in_sec = range_in_sec * np.sqrt(2)
+            if shape == "uniform":
+                noise = np.random.uniform(
+                        low=mean_in_sec-range_in_sec, high=mean_in_sec+range_in_sec, size=self.rec_points.shape[0]
+                    )
+            elif shape == "gaussian":
+                noise = np.random.normal(
+                    loc=mean_in_sec, scale=range_in_sec, size=self.rec_points.shape[0]
                 )
-                + mean_in_sec
-            )
-        elif shape == "gaussian":
-            noise = np.random.normal(
-                loc=mean_in_sec, scale=range_in_sec, size=self.rec_points.shape[0]
-            )
-        self.rec_points["tt"] += noise
-        if not self.rec_points_cs.empty:
-            self.rec_points_cs["tt"] += noise
-        if not self.rec_points_cr.empty:
-            self.rec_points_cr["tt"] += noise
+            rec_type["tt"] += noise
 
     def rotate(self, clat:float, clon:float, angle:float):
         """Rotate sources and receivers around a center point

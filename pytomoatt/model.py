@@ -5,7 +5,8 @@ from .para import ATTPara
 from .io.crustmodel import CrustModel
 from .io.asciimodel import ASCIIModel
 from .attarray import Dataset
-from .utils.common import init_axis, atand
+from .utils.common import init_axis
+import copy
 
 
 class ATTModel():
@@ -58,6 +59,11 @@ class ATTModel():
             mod.to_ani()
         f.close()
         return mod
+    
+    def copy(self):
+        """Copy the model
+        """
+        return copy.deepcopy(self)
     
     def _check_axis(self):
         if self.vel.shape != tuple(self.n_rtp):

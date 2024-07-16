@@ -1,6 +1,8 @@
-import yaml
+# import yaml
+from ruamel.yaml import YAML
 from .utils.common import init_axis
 
+yaml = YAML()
 
 class ATTPara:
     """Class for read and write parameter file with ``yaml`` format
@@ -13,7 +15,7 @@ class ATTPara:
         self.fname = fname
         with open(fname, encoding='utf-8') as f:
             file_data = f.read()
-        self.input_params = yaml.load(file_data, Loader=yaml.Loader)
+        self.input_params = yaml.load(file_data)
 
     def init_axis(self):
         dep, lat, lon, dd, dt, dp = init_axis(
@@ -32,4 +34,5 @@ class ATTPara:
         """
         if fname is None:
             fname = self.fname
-        yaml.dump(self.input_params, fname, Dumper=yaml.Dumper)
+        with open(fname, 'w') as f:
+            yaml.dump(self.input_params, f)
