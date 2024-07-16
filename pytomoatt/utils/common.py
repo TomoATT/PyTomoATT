@@ -142,3 +142,15 @@ def ignore_nan_3d(data):
     )
     result = interpolated.reshape(data.shape)
     return result
+
+def str2val(str_val):
+    try:
+        return int(str_val)
+    except ValueError:
+        try:
+            return float(str_val)
+        except ValueError:
+            try:
+                return [float(v) for v in str_val.strip('[]').split(',')]
+            except ValueError:
+                return str_val

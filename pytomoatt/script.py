@@ -8,7 +8,7 @@ import h5py
 from .src_rec import SrcRec
 from .model import ATTModel
 from .para import ATTPara
-from .utils.common import to_vtk, init_axis
+from .utils.common import to_vtk, init_axis, str2val
 from .checkerboard import Checker
 
 
@@ -38,6 +38,7 @@ The pta commands include:
 \033[1mcreate_model\033[0m          Create model for TomoATT
 \033[1mcreate_checkerboard\033[0m   Add perturbations on a model
 \033[1mmodel2vtk\033[0m             Write model with h5 format to VTK format
+\033[1msetpar\033[0m                Set parameters for input_params.yml
 ''')
         parser.add_argument('command', help='pta commands')
         argcomplete.autocomplete(parser)
@@ -165,6 +166,18 @@ The pta commands include:
         )
         with h5py.File(args.i) as model:
             to_vtk(args.o, model, dep, lat, lon)
+
+    def setpar(self):
+        parser = argparse.ArgumentParser(description='Set parameters for input_params.yml')
+        parser.add_argument('input_params', help='The parameter file of TomoATT, The section \"domain\" will be read.')
+        parser.add_argument('section', help='The section of parameter file to be set.')
+        parser.add_argument('key', help='The key of parameter file to be set.')
+        parser.add_argument('value', help='The value of parameter file to be set.')
+        parser.add_argument('-o', help='Path to output parameter file, defaults to overwrite input_params.yml', default=None, metavar='fname')
+        args = parser.parse_args(sys.argv[2:])
+        para = ATTPara(args.input_params)
+        para.input_params[args.section][args.key] = str2val(args.value)
+        para.write(fname=args.o)
 
 
 def main():
