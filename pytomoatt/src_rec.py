@@ -1287,7 +1287,8 @@ In this case, please set dist_in_data=True and read again."""
             for i in range(rec_data.shape[0]):
                 for j in range(i + 1, rec_data.shape[0]):
                     if abs(baz_values[i] - baz_values[j]) < max_azi_gap and \
-                       abs(dist_deg_values[i] - dist_deg_values[j]) < max_dist_gap:
+                       abs(dist_deg_values[i] - dist_deg_values[j]) < max_dist_gap and \
+                       phases[i] == phases[j]:
                         data_row = {
                             "src_index": idx,
                             "rec_index1": rec_indices[i],
@@ -1340,7 +1341,8 @@ In this case, please set dist_in_data=True and read again."""
                 for j in range(i + 1, rec_data.shape[0]):
                     src_index = src_indices[j]
                     if abs(baz_values[i] - baz_values[j]) < max_azi_gap and \
-                       abs(dist_deg_values[i] - dist_deg_values[j]) < max_dist_gap:
+                       abs(dist_deg_values[i] - dist_deg_values[j]) < max_dist_gap and \
+                       rec_phases[i] == rec_phases[j]:
                         data_row = {
                             "src_index": src_indices[i],
                             "rec_index": rec_indices[i],
@@ -1482,6 +1484,85 @@ In this case, please set dist_in_data=True and read again."""
                 self.rec_points_cr.loc[i, "stlo"] = self.receivers[self.receivers["staname"] == row["staname"]]["stlo"]
                 self.rec_points_cr.loc[i, "evla2"] = self.sources[self.sources["event_id"] == row["event_id2"]]["evla"]
                 self.rec_points_cr.loc[i, "evlo2"] = self.sources[self.sources["event_id"] == row["event_id2"]]["evlo"]
+
+    def to_utm(self, zone):
+        """Convert sources and receivers to UTM coordinates
+
+        :param zone: UTM zone number
+        :type zone: int
+        """
+        from pyproj import Proj
+
+        latlon2utm = Proj(proj="utm", zone=zone, ellps="WGS84")
+
+        self.sources["evlo"], self.sources["evla"] = latlon2utm(
+            self.sources["evlo"], self.sources["evla"]
+        )
+        self.receivers["stlo"], self.receivers["stla"] = latlon2utm(
+            self.receivers["stlo"], self.receivers["stla"]
+        )
+
+        self.src_points = self.src_points.merge(
+            self.sources[['event_id', 'evlo', 'evla']],
+            on='event_id',
+            how='left',
+            suffixes=('', '_new')
+        )
+        self.src_points['evlo'] = self.src_points['evlo_new']
+        self.src_points['evla'] = self.src_points['evla_new']
+        self.src_points.drop(columns=['evlo_new', 'evla_new'], inplace=True)
+
+        self.rec_points = self.rec_points.merge(
+            self.receivers[['staname', 'stlo', 'stla']],
+            on='staname',
+            how='left',
+            suffixes=('', '_new')
+        )
+        self.rec_points['stlo'] = self.rec_points['stlo_new']
+        self.rec_points['stla'] = self.rec_points['stla_new']
+        self.rec_points.drop(columns=['stlo_new', 'stla_new'], inplace=True)
+
+        if not self.rec_points_cs.empty:
+            self.rec_points_cs = self.rec_points_cs.merge(
+                self.receivers[['staname', 'stlo', 'stla']],
+                left_on='staname1',
+                right_on='staname',
+                how='left',
+            )
+            self.rec_points_cs['stlo1'] = self.rec_points_cs['stlo']
+            self.rec_points_cs['stla1'] = self.rec_points_cs['stla']
+            self.rec_points_cs.drop(columns=['stlo', 'stla', 'staname'], inplace=True)
+
+            self.rec_points_cs = self.rec_points_cs.merge(
+                self.receivers[['staname', 'stlo', 'stla']],
+                left_on='staname2',
+                right_on='staname',
+                how='left',
+            )
+            self.rec_points_cs['stlo2'] = self.rec_points_cs['stlo']
+            self.rec_points_cs['stla2'] = self.rec_points_cs['stla']
+            self.rec_points_cs.drop(columns=['stlo', 'stla', 'staname'], inplace=True)
+
+        if not self.rec_points_cr.empty:
+            self.rec_points_cr = self.rec_points_cr.merge(
+                self.receivers[['staname', 'stlo', 'stla']],
+                on='staname',
+                how='left',
+                suffixes=('', '_new')
+            )
+            self.rec_points_cr['stlo'] = self.rec_points_cr['stlo_new']
+            self.rec_points_cr['stla'] = self.rec_points_cr['stla_new']
+            self.rec_points_cr.drop(columns=['stlo_new', 'stla_new'], inplace=True)
+
+            self.rec_points_cr = self.rec_points_cr.merge(
+                self.sources[['event_id', 'evlo', 'evla']],
+                left_on='event_id2',
+                right_on='event_id',
+                how='left',
+            )
+            self.rec_points_cr['evlo2'] = self.rec_points_cr['evlo']
+            self.rec_points_cr['evla2'] = self.rec_points_cr['evla']
+            self.rec_points_cr.drop(columns=['evlo', 'evla', 'event_id'], inplace=True)
 
     def write_receivers(self, fname: str):
         """
