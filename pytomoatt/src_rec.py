@@ -1157,6 +1157,14 @@ In this case, please set dist_in_data=True and read again."""
         # calculate weight for each event
         self.src_points["weight"] = 1 / np.sqrt(self.src_points["num_sources"])
 
+        # assign weight to sources
+        self.sources["weight"] = self.sources.apply(
+            lambda x: self.src_points[
+                (self.src_points["event_id"] == x["event_id"])
+            ]["weight"].values[0],
+            axis=1,
+        )
+
         # drop 'lat_group' and 'lon_group' and 'dep_group'
         self.src_points = self.src_points.drop(
             columns=["lat_group", "lon_group", "dep_group", "num_sources"]
