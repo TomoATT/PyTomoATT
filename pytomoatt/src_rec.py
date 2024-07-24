@@ -1252,7 +1252,7 @@ In this case, please set dist_in_data=True and read again."""
             "num_events"
         ].transform("max")
 
-    def generate_double_difference(self, type='cs', max_azi_gap=15, max_dist_gap=2.5, dd_weight='aravge', recalc_baz=False):
+    def generate_double_difference(self, type='cs', max_azi_gap=15, max_dist_gap=2.5, dd_weight='average', recalc_baz=False):
         """
         Generate double difference data
 
