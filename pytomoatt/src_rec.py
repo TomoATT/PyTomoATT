@@ -1230,7 +1230,7 @@ In this case, please set dist_in_data=True and read again."""
             "num_events"
         ].transform("max")
 
-    def generate_double_difference(self, type='cs', max_azi_gap=15, max_dist_gap=2.5, recalc_baz=False):
+    def generate_double_difference(self, type='cs', max_azi_gap=15, max_dist_gap=2.5, dd_weight='aravge', recalc_baz=False):
         """
         Generate double difference data
 
@@ -1240,6 +1240,7 @@ In this case, please set dist_in_data=True and read again."""
         :type max_azi_gap: float, optional
         :param max_dist_gap: Maximum distance gap for selecting events, defaults to 2.5
         :type max_dist_gap: float, optional
+        :param dd_weight: Weighting method for double difference, options: ``average``, ``multiply``, defaults to ``average``
         :param recalc_baz: Recalculate azimuth and back azimuth, defaults to False
         :type recalc_baz: bool, optional
 
@@ -1250,12 +1251,12 @@ In this case, please set dist_in_data=True and read again."""
             self.calc_distaz()
 
         if type == 'cs':
-            self._generate_cs(max_azi_gap, max_dist_gap)
+            self._generate_cs(max_azi_gap, max_dist_gap, dd_weight)
         elif type == 'cr':
-            self._generate_cr(max_azi_gap, max_dist_gap)
+            self._generate_cr(max_azi_gap, max_dist_gap, dd_weight)
         elif type == 'both':
-            self._generate_cs(max_azi_gap, max_dist_gap)
-            self._generate_cr(max_azi_gap, max_dist_gap)
+            self._generate_cs(max_azi_gap, max_dist_gap, dd_weight)
+            self._generate_cr(max_azi_gap, max_dist_gap, dd_weight)
         else:
             self.log.SrcReclog.error(
                 "Only 'cs', 'cr' or 'both' are supported for type of double difference"
@@ -1263,7 +1264,7 @@ In this case, please set dist_in_data=True and read again."""
 
         self.update()
 
-    def _generate_cs(self, max_azi_gap, max_dist_gap):
+    def _generate_cs(self, max_azi_gap, max_dist_gap, dd_weight='average'):
         names, _ = setup_rec_points_dd('cs')
         self.rec_points_cs = pd.DataFrame(columns=names)
         src = self.rec_points.groupby("src_index")
@@ -1303,7 +1304,7 @@ In this case, please set dist_in_data=True and read again."""
                             "stel2": stels[j],
                             "phase": f"{phases[i]},cs",
                             "tt": tts[i] - tts[j],
-                            "weight": (weights[i] + weights[j]) / 2,
+                            "weight": self._cal_dd_weight(weights[i], weights[j], dd_weight),
                         }
                         # set src_index to index
                         dd_data.append(data_row)
@@ -1313,7 +1314,7 @@ In this case, please set dist_in_data=True and read again."""
             "rec_points_cs after generation: {}".format(self.rec_points_cs.shape)
         )
 
-    def _generate_cr(self, max_azi_gap, max_dist_gap):
+    def _generate_cr(self, max_azi_gap, max_dist_gap, dd_weight='average'):
         names, _ = setup_rec_points_dd('cr')
         self.rec_points_cr = pd.DataFrame(columns=names)
         src_id = self.src_points["event_id"].values
@@ -1357,7 +1358,8 @@ In this case, please set dist_in_data=True and read again."""
                             "evdp2": src_dp[src_index],
                             "phase": f"{rec_phases[i]},cr",
                             "tt": tts[i] - tts[j],
-                            "weight": (src_weights[src_index]+rec_weights[i])/2,
+                            # "weight": (src_weights[src_index]+rec_weights[i])/2,
+                            "weight": self._cal_dd_weight(src_weights[src_index], rec_weights[i], dd_weight),
                         }
                         results.append(data_row)
 
@@ -1381,6 +1383,14 @@ In this case, please set dist_in_data=True and read again."""
         dist_ref = scale * np.mean(dist)
         om = np.exp(-((dist / dist_ref) ** 2)) * points.shape[0]
         return 1 / np.mean(om, axis=0)
+    
+    def _cal_dd_weight(self, w1, w2, dd_weight='average'):
+        if dd_weight == "average":
+            return (w1 + w2) / 2
+        elif dd_weight == "multiply":
+            return w1 * w2
+        else:
+            raise ValueError("Only 'average' or 'multiply' are supported for dd_weight")
 
     def geo_weighting(self, scale=0.5, obj="both", dd_weight="average"):
         """Calculating geographical weights for sources
@@ -1392,14 +1402,6 @@ In this case, please set dist_in_data=True and read again."""
         :type obj: str, optional
         :param dd_weight: Weighting method for double difference data, options: ``average`` or ``multiply``, defaults to ``average``
         """
-
-        def cal_dd_weight(w1, w2):
-            if dd_weight == "average":
-                return (w1 + w2) / 2
-            elif dd_weight == "multiply":
-                return w1 * w2
-            else:
-                raise ValueError("Only 'average' or 'multiply' are supported for dd_weight")
 
         if obj == "src" or obj == "both":
             self.src_points["weight"] = self._calc_weights(
@@ -1420,13 +1422,13 @@ In this case, please set dist_in_data=True and read again."""
                 for i, row in self.rec_points_cs.iterrows():
                     w1 = self.receivers.loc[self.receivers['staname'] == row['staname1'], 'weight'].values[0]
                     w2 = self.receivers.loc[self.receivers['staname'] == row['staname2'], 'weight'].values[0]
-                    self.rec_points_cs.loc[i, 'weight'] = cal_dd_weight(w1, w2)
+                    self.rec_points_cs.loc[i, 'weight'] = self._cal_dd_weight(w1, w2, dd_weight)
             
             if not self.rec_points_cr.empty:
                 for i, row in self.rec_points_cr.iterrows():
                     w1 = self.receivers.loc[self.receivers['staname'] == row['staname'], 'weight'].values[0]
                     w2 = self.src_points.loc[self.src_points['event_id'] == row['event_id2'], 'weight'].values[0]
-                    self.rec_points_cr.loc[i, 'weight'] = cal_dd_weight(w1, w2)
+                    self.rec_points_cr.loc[i, 'weight'] = self._cal_dd_weight(w1, w2, dd_weight)
 
     def add_noise(self, range_in_sec=0.1, mean_in_sec=0.0, shape="gaussian"):
         """Add random noise on travel time
