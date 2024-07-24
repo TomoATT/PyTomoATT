@@ -1382,20 +1382,30 @@ In this case, please set dist_in_data=True and read again."""
         om = np.exp(-((dist / dist_ref) ** 2)) * points.shape[0]
         return 1 / np.mean(om, axis=0)
 
-    def geo_weighting(self, scale=0.5, rec_weight=False):
+    def geo_weighting(self, scale=0.5, obj="both", dd_weight="average"):
         """Calculating geographical weights for sources
 
         :param scale: Scale of reference distance parameter. 
                       See equation 22 in Ruan et al., (2019). The reference distance is given by ``scale* dis_average``, defaults to 0.5
         :type scale: float, optional
-        :param rec_weight: Whether to calculate weights for receivers, defaults to False
-        :type rec_weight: bool, optional
+        :param obj: Object to be weighted, options: ``src``, ``rec`` or ``both``, defaults to ``both``
+        :type obj: str, optional
+        :param dd_weight: Weighting method for double difference data, options: ``average`` or ``multiply``, defaults to ``average``
         """
 
-        self.src_points["weight"] = self._calc_weights(
-            self.src_points["evla"], self.src_points["evlo"], scale
-        )
-        if rec_weight:
+        def cal_dd_weight(w1, w2):
+            if dd_weight == "average":
+                return (w1 + w2) / 2
+            elif dd_weight == "multiply":
+                return w1 * w2
+            else:
+                raise ValueError("Only 'average' or 'multiply' are supported for dd_weight")
+
+        if obj == "src" or obj == "both":
+            self.src_points["weight"] = self._calc_weights(
+                self.src_points["evla"], self.src_points["evlo"], scale
+            )
+        if obj == "rec" or obj == "both":
             weights = self._calc_weights(
                 self.receivers['stla'],
                 self.receivers['stlo'],
@@ -1410,13 +1420,13 @@ In this case, please set dist_in_data=True and read again."""
                 for i, row in self.rec_points_cs.iterrows():
                     w1 = self.receivers.loc[self.receivers['staname'] == row['staname1'], 'weight'].values[0]
                     w2 = self.receivers.loc[self.receivers['staname'] == row['staname2'], 'weight'].values[0]
-                    self.rec_points_cs.loc[i, 'weight'] = (w1 + w2) / 2
+                    self.rec_points_cs.loc[i, 'weight'] = cal_dd_weight(w1, w2)
             
             if not self.rec_points_cr.empty:
                 for i, row in self.rec_points_cr.iterrows():
                     w1 = self.receivers.loc[self.receivers['staname'] == row['staname'], 'weight'].values[0]
                     w2 = self.src_points.loc[self.src_points['event_id'] == row['event_id2'], 'weight'].values[0]
-                    self.rec_points_cr.loc[i, 'weight'] = (w1 + w2) / 2
+                    self.rec_points_cr.loc[i, 'weight'] = cal_dd_weight(w1, w2)
 
     def add_noise(self, range_in_sec=0.1, mean_in_sec=0.0, shape="gaussian"):
         """Add random noise on travel time
