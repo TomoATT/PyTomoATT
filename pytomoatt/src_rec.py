@@ -494,6 +494,13 @@ In this case, please set dist_in_data=True and read again."""
         self.sources = pd.DataFrame(
             sources, columns=src_col
         ).drop_duplicates(ignore_index=True)
+        self.sources = self.sources.astype(
+            {
+                "evla": float,
+                "evlo": float,
+                "evdp": float,
+            }
+        )
 
         # get receivers
         rec_col = ["staname", "stla", "stlo", "stel"]
@@ -515,6 +522,13 @@ In this case, please set dist_in_data=True and read again."""
         self.receivers = pd.DataFrame(
             receivers, columns=rec_col
         ).drop_duplicates(ignore_index=True)
+        self.receivers = self.receivers.astype(
+            {
+                "stla": float,
+                "stlo": float,
+                "stel": float,
+            }
+        )
 
     def reset_index(self):
         """Reset index of source and receivers."""
