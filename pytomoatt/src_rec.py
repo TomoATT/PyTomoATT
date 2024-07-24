@@ -1429,6 +1429,13 @@ In this case, please set dist_in_data=True and read again."""
             self.src_points["weight"] = self._calc_weights(
                 self.src_points["evla"], self.src_points["evlo"], scale
             )
+            # assign weight to sources
+            self.sources["weight"] = self.sources.apply(
+                lambda x: self.src_points[
+                    (self.src_points["event_id"] == x["event_id"])
+                ]["weight"].values[0],
+                axis=1,
+            )
         if obj == "rec" or obj == "both":
             weights = self._calc_weights(
                 self.receivers['stla'],
