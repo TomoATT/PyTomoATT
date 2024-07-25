@@ -1112,7 +1112,7 @@ In this case, please set dist_in_data=True and read again."""
         # self.remove_rec_by_new_src()
         self.update()
 
-    def box_weighting(self, d_deg: float, d_km: float, obj="both"):
+    def box_weighting(self, d_deg: float, d_km: float, obj="both", dd_weight='average'):
         """Weighting sources and receivers by number in each subgrid
 
         :param d_deg: grid size along lat and lon in degree
@@ -1121,14 +1121,15 @@ In this case, please set dist_in_data=True and read again."""
         :type d_km: float
         :param obj: Object to be weighted, options: ``src``, ``rec`` or ``both``, defaults to ``both``
         :type obj: str, optional
+        :param dd_weight: Weighting method for double difference, options: ``average``, `multiply`, defaults to ``average``
         """
         if obj == "src":
             self._box_weighting_ev(d_deg, d_km)
         elif obj == "rec":
-            self._box_weighting_st(d_deg)
+            self._box_weighting_st(d_deg, dd_weight)
         elif obj == "both":
             self._box_weighting_ev(d_deg, d_km)
-            self._box_weighting_st(d_deg)
+            self._box_weighting_st(d_deg, dd_weight)
         else:
             self.log.SrcReclog.error(
                 "Only 'src', 'rec' or 'both' are supported for obj"
@@ -1170,7 +1171,7 @@ In this case, please set dist_in_data=True and read again."""
             columns=["lat_group", "lon_group", "dep_group", "num_sources"]
         )
 
-    def _box_weighting_st(self, d_deg: float):
+    def _box_weighting_st(self, d_deg: float, dd_weight='average'):
         """Weighting receivers by number of sources in each subgrid
 
         :param d_deg: grid size along lat and lon in degree
@@ -1208,14 +1209,15 @@ In this case, please set dist_in_data=True and read again."""
         # the weight is the average of the two receivers
         if not self.rec_points_cs.empty:
             self.rec_points_cs["weight"] = self.rec_points_cs.apply(
-                lambda x: np.mean([
+                lambda x: self._cal_dd_weight(
                     self.receivers[
                         (self.receivers["staname"] == x["staname1"])
                     ]["weight"].values[0],
                     self.receivers[
                         (self.receivers["staname"] == x["staname2"])
-                    ]["weight"].values[0]
-                ]),
+                    ]["weight"].values[0],
+                    dd_weight
+                ),
                 axis=1,
             )
         
@@ -1223,14 +1225,15 @@ In this case, please set dist_in_data=True and read again."""
         # the weight is the average of the one receiver and the other source
         if not self.rec_points_cr.empty:
             self.rec_points_cr["weight"] = self.rec_points_cr.apply(
-                lambda x: np.mean([
+                lambda x: self._cal_dd_weight(
                     self.receivers[
                         (self.receivers["staname"] == x["staname"])
                     ]["weight"].values[0],
                     self.src_points[
                         (self.src_points["event_id"] == x["event_id2"])
-                    ]["weight"].values[0]
-                ]),
+                    ]["weight"].values[0],
+                    dd_weight
+                ),
                 axis=1,
             )
 
