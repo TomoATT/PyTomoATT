@@ -253,7 +253,8 @@ class SrcRec:
             datedf = datedf.astype(type_dict)
         except:
             sr.log.SrcReclog.error("please check the date format in the src_rec file")
-            return sr.src_points
+            # return sr.src_points
+            return sr
         dateseris = (
             datedf.astype(str)
             .apply(lambda x: ".".join(x), axis=1)
