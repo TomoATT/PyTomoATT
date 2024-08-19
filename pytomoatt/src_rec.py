@@ -253,7 +253,8 @@ class SrcRec:
             datedf = datedf.astype(type_dict)
         except:
             sr.log.SrcReclog.error("please check the date format in the src_rec file")
-            return sr.src_points
+            # return sr.src_points
+            return sr
         dateseris = (
             datedf.astype(str)
             .apply(lambda x: ".".join(x), axis=1)
@@ -494,6 +495,13 @@ In this case, please set dist_in_data=True and read again."""
         self.sources = pd.DataFrame(
             sources, columns=src_col
         ).drop_duplicates(ignore_index=True)
+        self.sources = self.sources.astype(
+            {
+                "evla": float,
+                "evlo": float,
+                "evdp": float,
+            }
+        )
 
         # get receivers
         rec_col = ["staname", "stla", "stlo", "stel"]
@@ -515,6 +523,13 @@ In this case, please set dist_in_data=True and read again."""
         self.receivers = pd.DataFrame(
             receivers, columns=rec_col
         ).drop_duplicates(ignore_index=True)
+        self.receivers = self.receivers.astype(
+            {
+                "stla": float,
+                "stlo": float,
+                "stel": float,
+            }
+        )
 
     def reset_index(self):
         """Reset index of source and receivers."""
@@ -1098,7 +1113,7 @@ In this case, please set dist_in_data=True and read again."""
         # self.remove_rec_by_new_src()
         self.update()
 
-    def box_weighting(self, d_deg: float, d_km: float, obj="both"):
+    def box_weighting(self, d_deg: float, d_km: float, obj="both", dd_weight='average'):
         """Weighting sources and receivers by number in each subgrid
 
         :param d_deg: grid size along lat and lon in degree
@@ -1107,14 +1122,15 @@ In this case, please set dist_in_data=True and read again."""
         :type d_km: float
         :param obj: Object to be weighted, options: ``src``, ``rec`` or ``both``, defaults to ``both``
         :type obj: str, optional
+        :param dd_weight: Weighting method for double difference, options: ``average``, `multiply`, defaults to ``average``
         """
         if obj == "src":
             self._box_weighting_ev(d_deg, d_km)
         elif obj == "rec":
-            self._box_weighting_st(d_deg)
+            self._box_weighting_st(d_deg, dd_weight)
         elif obj == "both":
             self._box_weighting_ev(d_deg, d_km)
-            self._box_weighting_st(d_deg)
+            self._box_weighting_st(d_deg, dd_weight)
         else:
             self.log.SrcReclog.error(
                 "Only 'src', 'rec' or 'both' are supported for obj"
@@ -1143,12 +1159,20 @@ In this case, please set dist_in_data=True and read again."""
         # calculate weight for each event
         self.src_points["weight"] = 1 / np.sqrt(self.src_points["num_sources"])
 
+        # assign weight to sources
+        self.sources["weight"] = self.sources.apply(
+            lambda x: self.src_points[
+                (self.src_points["event_id"] == x["event_id"])
+            ]["weight"].values[0],
+            axis=1,
+        )
+
         # drop 'lat_group' and 'lon_group' and 'dep_group'
         self.src_points = self.src_points.drop(
             columns=["lat_group", "lon_group", "dep_group", "num_sources"]
         )
 
-    def _box_weighting_st(self, d_deg: float):
+    def _box_weighting_st(self, d_deg: float, dd_weight='average'):
         """Weighting receivers by number of sources in each subgrid
 
         :param d_deg: grid size along lat and lon in degree
@@ -1186,14 +1210,15 @@ In this case, please set dist_in_data=True and read again."""
         # the weight is the average of the two receivers
         if not self.rec_points_cs.empty:
             self.rec_points_cs["weight"] = self.rec_points_cs.apply(
-                lambda x: np.mean([
+                lambda x: self._cal_dd_weight(
                     self.receivers[
                         (self.receivers["staname"] == x["staname1"])
                     ]["weight"].values[0],
                     self.receivers[
                         (self.receivers["staname"] == x["staname2"])
-                    ]["weight"].values[0]
-                ]),
+                    ]["weight"].values[0],
+                    dd_weight
+                ),
                 axis=1,
             )
         
@@ -1201,14 +1226,15 @@ In this case, please set dist_in_data=True and read again."""
         # the weight is the average of the one receiver and the other source
         if not self.rec_points_cr.empty:
             self.rec_points_cr["weight"] = self.rec_points_cr.apply(
-                lambda x: np.mean([
+                lambda x: self._cal_dd_weight(
                     self.receivers[
                         (self.receivers["staname"] == x["staname"])
                     ]["weight"].values[0],
                     self.src_points[
                         (self.src_points["event_id"] == x["event_id2"])
-                    ]["weight"].values[0]
-                ]),
+                    ]["weight"].values[0],
+                    dd_weight
+                ),
                 axis=1,
             )
 
@@ -1230,7 +1256,7 @@ In this case, please set dist_in_data=True and read again."""
             "num_events"
         ].transform("max")
 
-    def generate_double_difference(self, type='cs', max_azi_gap=15, max_dist_gap=2.5, recalc_baz=False):
+    def generate_double_difference(self, type='cs', max_azi_gap=15, max_dist_gap=2.5, dd_weight='average', recalc_baz=False):
         """
         Generate double difference data
 
@@ -1240,6 +1266,7 @@ In this case, please set dist_in_data=True and read again."""
         :type max_azi_gap: float, optional
         :param max_dist_gap: Maximum distance gap for selecting events, defaults to 2.5
         :type max_dist_gap: float, optional
+        :param dd_weight: Weighting method for double difference, options: ``average``, ``multiply``, defaults to ``average``
         :param recalc_baz: Recalculate azimuth and back azimuth, defaults to False
         :type recalc_baz: bool, optional
 
@@ -1250,12 +1277,12 @@ In this case, please set dist_in_data=True and read again."""
             self.calc_distaz()
 
         if type == 'cs':
-            self._generate_cs(max_azi_gap, max_dist_gap)
+            self._generate_cs(max_azi_gap, max_dist_gap, dd_weight)
         elif type == 'cr':
-            self._generate_cr(max_azi_gap, max_dist_gap)
+            self._generate_cr(max_azi_gap, max_dist_gap, dd_weight)
         elif type == 'both':
-            self._generate_cs(max_azi_gap, max_dist_gap)
-            self._generate_cr(max_azi_gap, max_dist_gap)
+            self._generate_cs(max_azi_gap, max_dist_gap, dd_weight)
+            self._generate_cr(max_azi_gap, max_dist_gap, dd_weight)
         else:
             self.log.SrcReclog.error(
                 "Only 'cs', 'cr' or 'both' are supported for type of double difference"
@@ -1263,7 +1290,7 @@ In this case, please set dist_in_data=True and read again."""
 
         self.update()
 
-    def _generate_cs(self, max_azi_gap, max_dist_gap):
+    def _generate_cs(self, max_azi_gap, max_dist_gap, dd_weight='average'):
         names, _ = setup_rec_points_dd('cs')
         self.rec_points_cs = pd.DataFrame(columns=names)
         src = self.rec_points.groupby("src_index")
@@ -1287,7 +1314,8 @@ In this case, please set dist_in_data=True and read again."""
             for i in range(rec_data.shape[0]):
                 for j in range(i + 1, rec_data.shape[0]):
                     if abs(baz_values[i] - baz_values[j]) < max_azi_gap and \
-                       abs(dist_deg_values[i] - dist_deg_values[j]) < max_dist_gap:
+                       abs(dist_deg_values[i] - dist_deg_values[j]) < max_dist_gap and \
+                       phases[i] == phases[j]:
                         data_row = {
                             "src_index": idx,
                             "rec_index1": rec_indices[i],
@@ -1302,7 +1330,7 @@ In this case, please set dist_in_data=True and read again."""
                             "stel2": stels[j],
                             "phase": f"{phases[i]},cs",
                             "tt": tts[i] - tts[j],
-                            "weight": (weights[i] + weights[j]) / 2,
+                            "weight": self._cal_dd_weight(weights[i], weights[j], dd_weight),
                         }
                         # set src_index to index
                         dd_data.append(data_row)
@@ -1312,7 +1340,7 @@ In this case, please set dist_in_data=True and read again."""
             "rec_points_cs after generation: {}".format(self.rec_points_cs.shape)
         )
 
-    def _generate_cr(self, max_azi_gap, max_dist_gap):
+    def _generate_cr(self, max_azi_gap, max_dist_gap, dd_weight='average'):
         names, _ = setup_rec_points_dd('cr')
         self.rec_points_cr = pd.DataFrame(columns=names)
         src_id = self.src_points["event_id"].values
@@ -1340,7 +1368,8 @@ In this case, please set dist_in_data=True and read again."""
                 for j in range(i + 1, rec_data.shape[0]):
                     src_index = src_indices[j]
                     if abs(baz_values[i] - baz_values[j]) < max_azi_gap and \
-                       abs(dist_deg_values[i] - dist_deg_values[j]) < max_dist_gap:
+                       abs(dist_deg_values[i] - dist_deg_values[j]) < max_dist_gap and \
+                       rec_phases[i] == rec_phases[j]:
                         data_row = {
                             "src_index": src_indices[i],
                             "rec_index": rec_indices[i],
@@ -1355,7 +1384,8 @@ In this case, please set dist_in_data=True and read again."""
                             "evdp2": src_dp[src_index],
                             "phase": f"{rec_phases[i]},cr",
                             "tt": tts[i] - tts[j],
-                            "weight": (src_weights[src_index]+rec_weights[i])/2,
+                            # "weight": (src_weights[src_index]+rec_weights[i])/2,
+                            "weight": self._cal_dd_weight(src_weights[src_index], rec_weights[i], dd_weight),
                         }
                         results.append(data_row)
 
@@ -1379,21 +1409,38 @@ In this case, please set dist_in_data=True and read again."""
         dist_ref = scale * np.mean(dist)
         om = np.exp(-((dist / dist_ref) ** 2)) * points.shape[0]
         return 1 / np.mean(om, axis=0)
+    
+    def _cal_dd_weight(self, w1, w2, dd_weight='average'):
+        if dd_weight == "average":
+            return (w1 + w2) / 2
+        elif dd_weight == "multiply":
+            return w1 * w2
+        else:
+            raise ValueError("Only 'average' or 'multiply' are supported for dd_weight")
 
-    def geo_weighting(self, scale=0.5, rec_weight=False):
+    def geo_weighting(self, scale=0.5, obj="both", dd_weight="average"):
         """Calculating geographical weights for sources
 
         :param scale: Scale of reference distance parameter. 
                       See equation 22 in Ruan et al., (2019). The reference distance is given by ``scale* dis_average``, defaults to 0.5
         :type scale: float, optional
-        :param rec_weight: Whether to calculate weights for receivers, defaults to False
-        :type rec_weight: bool, optional
+        :param obj: Object to be weighted, options: ``src``, ``rec`` or ``both``, defaults to ``both``
+        :type obj: str, optional
+        :param dd_weight: Weighting method for double difference data, options: ``average`` or ``multiply``, defaults to ``average``
         """
 
-        self.src_points["weight"] = self._calc_weights(
-            self.src_points["evla"], self.src_points["evlo"], scale
-        )
-        if rec_weight:
+        if obj == "src" or obj == "both":
+            self.src_points["weight"] = self._calc_weights(
+                self.src_points["evla"], self.src_points["evlo"], scale
+            )
+            # assign weight to sources
+            self.sources["weight"] = self.sources.apply(
+                lambda x: self.src_points[
+                    (self.src_points["event_id"] == x["event_id"])
+                ]["weight"].values[0],
+                axis=1,
+            )
+        if obj == "rec" or obj == "both":
             weights = self._calc_weights(
                 self.receivers['stla'],
                 self.receivers['stlo'],
@@ -1408,13 +1455,13 @@ In this case, please set dist_in_data=True and read again."""
                 for i, row in self.rec_points_cs.iterrows():
                     w1 = self.receivers.loc[self.receivers['staname'] == row['staname1'], 'weight'].values[0]
                     w2 = self.receivers.loc[self.receivers['staname'] == row['staname2'], 'weight'].values[0]
-                    self.rec_points_cs.loc[i, 'weight'] = (w1 + w2) / 2
+                    self.rec_points_cs.loc[i, 'weight'] = self._cal_dd_weight(w1, w2, dd_weight)
             
             if not self.rec_points_cr.empty:
                 for i, row in self.rec_points_cr.iterrows():
                     w1 = self.receivers.loc[self.receivers['staname'] == row['staname'], 'weight'].values[0]
                     w2 = self.src_points.loc[self.src_points['event_id'] == row['event_id2'], 'weight'].values[0]
-                    self.rec_points_cr.loc[i, 'weight'] = (w1 + w2) / 2
+                    self.rec_points_cr.loc[i, 'weight'] = self._cal_dd_weight(w1, w2, dd_weight)
 
     def add_noise(self, range_in_sec=0.1, mean_in_sec=0.0, shape="gaussian"):
         """Add random noise on travel time
@@ -1482,6 +1529,85 @@ In this case, please set dist_in_data=True and read again."""
                 self.rec_points_cr.loc[i, "stlo"] = self.receivers[self.receivers["staname"] == row["staname"]]["stlo"]
                 self.rec_points_cr.loc[i, "evla2"] = self.sources[self.sources["event_id"] == row["event_id2"]]["evla"]
                 self.rec_points_cr.loc[i, "evlo2"] = self.sources[self.sources["event_id"] == row["event_id2"]]["evlo"]
+
+    def to_utm(self, zone):
+        """Convert sources and receivers to UTM coordinates
+
+        :param zone: UTM zone number
+        :type zone: int
+        """
+        from pyproj import Proj
+
+        latlon2utm = Proj(proj="utm", zone=zone, ellps="WGS84")
+
+        self.sources["evlo"], self.sources["evla"] = latlon2utm(
+            self.sources["evlo"], self.sources["evla"]
+        )
+        self.receivers["stlo"], self.receivers["stla"] = latlon2utm(
+            self.receivers["stlo"], self.receivers["stla"]
+        )
+
+        self.src_points = self.src_points.merge(
+            self.sources[['event_id', 'evlo', 'evla']],
+            on='event_id',
+            how='left',
+            suffixes=('', '_new')
+        )
+        self.src_points['evlo'] = self.src_points['evlo_new']
+        self.src_points['evla'] = self.src_points['evla_new']
+        self.src_points.drop(columns=['evlo_new', 'evla_new'], inplace=True)
+
+        self.rec_points = self.rec_points.merge(
+            self.receivers[['staname', 'stlo', 'stla']],
+            on='staname',
+            how='left',
+            suffixes=('', '_new')
+        )
+        self.rec_points['stlo'] = self.rec_points['stlo_new']
+        self.rec_points['stla'] = self.rec_points['stla_new']
+        self.rec_points.drop(columns=['stlo_new', 'stla_new'], inplace=True)
+
+        if not self.rec_points_cs.empty:
+            self.rec_points_cs = self.rec_points_cs.merge(
+                self.receivers[['staname', 'stlo', 'stla']],
+                left_on='staname1',
+                right_on='staname',
+                how='left',
+            )
+            self.rec_points_cs['stlo1'] = self.rec_points_cs['stlo']
+            self.rec_points_cs['stla1'] = self.rec_points_cs['stla']
+            self.rec_points_cs.drop(columns=['stlo', 'stla', 'staname'], inplace=True)
+
+            self.rec_points_cs = self.rec_points_cs.merge(
+                self.receivers[['staname', 'stlo', 'stla']],
+                left_on='staname2',
+                right_on='staname',
+                how='left',
+            )
+            self.rec_points_cs['stlo2'] = self.rec_points_cs['stlo']
+            self.rec_points_cs['stla2'] = self.rec_points_cs['stla']
+            self.rec_points_cs.drop(columns=['stlo', 'stla', 'staname'], inplace=True)
+
+        if not self.rec_points_cr.empty:
+            self.rec_points_cr = self.rec_points_cr.merge(
+                self.receivers[['staname', 'stlo', 'stla']],
+                on='staname',
+                how='left',
+                suffixes=('', '_new')
+            )
+            self.rec_points_cr['stlo'] = self.rec_points_cr['stlo_new']
+            self.rec_points_cr['stla'] = self.rec_points_cr['stla_new']
+            self.rec_points_cr.drop(columns=['stlo_new', 'stla_new'], inplace=True)
+
+            self.rec_points_cr = self.rec_points_cr.merge(
+                self.sources[['event_id', 'evlo', 'evla']],
+                left_on='event_id2',
+                right_on='event_id',
+                how='left',
+            )
+            self.rec_points_cr['evlo2'] = self.rec_points_cr['evlo']
+            self.rec_points_cr['evla2'] = self.rec_points_cr['evla']
+            self.rec_points_cr.drop(columns=['evlo', 'evla', 'event_id'], inplace=True)
 
     def write_receivers(self, fname: str):
         """

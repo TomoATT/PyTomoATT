@@ -35,9 +35,9 @@ PyTomoATT can be installed quickly via the PyPI with a command as following:
 pip install pytomoatt
 ```
 
-See section [Installation](https://migg-ntu.github.io/PyTomoATT/installation.html) in online documentation for more details.
+See section [Installation](https://tomoatt.github.io/PyTomoATT/installation.html) in online documentation for more details.
 
 
 ## Documentation
 
-The complete API documentation, and tutorials can be accessed at [PyTomoATT Documentation](https://migg-ntu.github.io/PyTomoATT/index.html).
+The complete API documentation, and tutorials can be accessed at [PyTomoATT Documentation](https://tomoatt.github.io/PyTomoATT/index.html).

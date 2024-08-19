@@ -19,7 +19,7 @@ class TestSrcRec:
 
     def test_subcase_03(self):
         sr = SrcRec.read(self.fname)
-        sr.geo_weighting(rec_weight=True)
+        sr.geo_weighting(0.1, "rec")
         sr.write('test_src_rec_eg')
 
     def test_subcase_04(self):
