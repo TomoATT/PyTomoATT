@@ -1,14 +1,15 @@
 #!/usr/bin/env python
 from setuptools import find_packages, setup
+from pytomoatt import __version__ as version
+
 packages = find_packages()
 
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
 
-VERSION = "0.2.2"
 setup(name='PyTomoATT',
-      version=VERSION,
+      version=version,
       author='Mijian Xu, Masaru Nagaso',
       long_description=long_description,
       long_description_content_type="text/markdown",
