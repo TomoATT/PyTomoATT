@@ -1,4 +1,4 @@
-__version__ = "0.2.3"
+from ._version import __version__
 
 from pytomoatt.para import ATTPara
 from pytomoatt.src_rec import SrcRec
