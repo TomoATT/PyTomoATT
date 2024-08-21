@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 from setuptools import find_packages, setup
-from .pytomoatt._version import __version__ as version
+from pytomoatt._version import __version__ as version
 
 packages = find_packages()
 
