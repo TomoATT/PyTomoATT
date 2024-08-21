@@ -2,7 +2,6 @@ from os.path import dirname, abspath, join, exists
 from os import makedirs
 from shutil import rmtree, copy
 import argparse
-import argcomplete
 import sys
 import h5py
 from .src_rec import SrcRec
@@ -41,7 +40,6 @@ The pta commands include:
 \033[1msetpar\033[0m                Set parameters for input_params.yml
 ''')
         parser.add_argument('command', help='pta commands')
-        argcomplete.autocomplete(parser)
         args = parser.parse_args(sys.argv[1:2])
         getattr(self, args.command)()
     
