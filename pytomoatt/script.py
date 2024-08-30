@@ -104,9 +104,9 @@ The pta commands include:
     def create_checkerboard(self):
         parser = argparse.ArgumentParser(description='Add perturbations on a model')
         parser.add_argument('input_params', help='The parameter file of TomoATT, The section \"domain\" will be read.')
-        parser.add_argument('-a', help='nx, ny and nz of anisotropic anomalies along longitude, '
-                                        'latitude and depth, defaults to the same as -n', 
-                            metavar='nx/ny/nz', default=None)
+        parser.add_argument('-a', help='nx, ny, nz, and FVD of anisotropic anomalies along longitude, '
+                                        'latitude and depth, and fast-velocity-direction, defaults to None', 
+                            metavar='nx/ny/nz[/fvd]', default=None)
         parser.add_argument('-i', help='Path to input model file', required=True, metavar='fname')
         parser.add_argument('-n', help='nx, ny and nz of velocity anomalies along longitude, latitude and depth', metavar='nx/ny/nz', required=True)
         parser.add_argument('-o', help='Path to output perturbed model', default=None, metavar='fname')
@@ -140,9 +140,14 @@ The pta commands include:
             lim_z = args.z
         cb.checkerboard(*n_period, *pert, lim_x=lim_x, lim_y=lim_y, lim_z=lim_z)
         if args.a is not None:
-            n_ani = [float(v) for v in args.a.split('/')]
+            ani_lst = args.a.split('/')
+            n_ani = [float(v) for v in ani_lst[0:3]]
+            if len(ani_lst) > 3:
+                ani_dir = float(ani_lst[3])
+            else:
+                ani_dir = 45.0
             cba = cb.copy()
-            cba.checkerboard(*n_ani, *pert, lim_x=lim_x, lim_y=lim_y, lim_z=lim_z)
+            cba.checkerboard(*n_ani, *pert, lim_x=lim_x, lim_y=lim_y, lim_z=lim_z, ani_dir=ani_dir)
             cb.epsilon = cba.epsilon
             cb.phi = cba.phi
             cb.xi = cba.xi

@@ -47,7 +47,7 @@ class Checker():
         return ntaper_left, ntaper_right
 
     def checkerboard(self, period_x, period_y, period_z,
-                     pert_vel=0.08, pert_ani=0.04,
+                     pert_vel=0.08, pert_ani=0.04, ani_dir=45,
                      lim_x=None, lim_y=None, lim_z=None):
         """Create checkerboard
 
@@ -104,8 +104,8 @@ class Checker():
         self.dlnv = self.perturbation*pert_vel
         self.epsilon = np.abs(self.perturbation)*pert_ani
         self.phi = np.zeros_like(self.vel)
-        self.phi[np.where(self.perturbation>0)] = 135.
-        self.phi[np.where(self.perturbation<0)] = 45.
+        self.phi[np.where(self.perturbation>0)] = ani_dir
+        self.phi[np.where(self.perturbation<0)] = ani_dir+90
         self.xi = self.epsilon*cosd(2*self.phi)
         self.eta = self.epsilon*sind(2*self.phi)
 
@@ -117,7 +117,7 @@ class Checker():
         """
         return copy.deepcopy(self)
 
-    def write(self, fname: str):
+    def write(self, fname):
         """Write new model to h5 file
 
         :param fname: Path to output file
