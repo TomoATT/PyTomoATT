@@ -46,7 +46,7 @@ class Checker():
         ntaper_right = int((x[-1]-xright)/dx)
         return ntaper_left, ntaper_right
 
-    def checkerboard(self, period_x, period_y, period_z,
+    def checkerboard(self, n_pert_x:int, n_pert_y:int, n_pert_z:int,
                      pert_vel=0.08, pert_ani=0.04, ani_dir=45,
                      lim_x=None, lim_y=None, lim_z=None):
         """Create checkerboard
@@ -75,7 +75,7 @@ class Checker():
             ntaper_right = 0
         x_pert = np.zeros_like(self.pp)
         x_pert[ntaper_left:self.pp.size-ntaper_right] = \
-            np.sin(period_x*np.pi*np.arange(self.pp.size-(ntaper_left+ntaper_right))/ \
+            np.sin(n_pert_x*np.pi*np.arange(self.pp.size-(ntaper_left+ntaper_right))/ \
             (self.pp.size-(ntaper_left+ntaper_right)))
 
         if lim_y is not None:
@@ -85,7 +85,7 @@ class Checker():
             ntaper_right = 0
         y_pert = np.zeros_like(self.tt)
         y_pert[ntaper_left:self.tt.size-ntaper_right] = \
-            np.sin(period_y*np.pi*np.arange(self.tt.size-(ntaper_left+ntaper_right))/ \
+            np.sin(n_pert_y*np.pi*np.arange(self.tt.size-(ntaper_left+ntaper_right))/ \
             (self.tt.size-(ntaper_left+ntaper_right)))
 
         if lim_z is not None:
@@ -95,7 +95,7 @@ class Checker():
             ntaper_right = 0
         z_pert = np.zeros_like(self.dd)
         z_pert[ntaper_right:self.dd.size-ntaper_left] = \
-            np.sin(period_z*np.pi*np.arange(self.dd.size-(ntaper_left+ntaper_right))/ \
+            np.sin(n_pert_z*np.pi*np.arange(self.dd.size-(ntaper_left+ntaper_right))/ \
             (self.dd.size-(ntaper_left+ntaper_right)))
 
         xx, yy, zz= np.meshgrid(z_pert, y_pert, x_pert, indexing='ij')

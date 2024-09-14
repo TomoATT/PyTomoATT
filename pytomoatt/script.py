@@ -173,13 +173,18 @@ The pta commands include:
     def setpar(self):
         parser = argparse.ArgumentParser(description='Set parameters for input_params.yml')
         parser.add_argument('input_params', help='The parameter file of TomoATT, The section \"domain\" will be read.')
-        parser.add_argument('section', help='The section of parameter file to be set.')
-        parser.add_argument('key', help='The key of parameter file to be set.')
+        parser.add_argument('key', help='The key of parameter file to be set. Use \".\" to separate the keys.')
         parser.add_argument('value', help='The value of parameter file to be set.')
         parser.add_argument('-o', help='Path to output parameter file, defaults to overwrite input_params.yml', default=None, metavar='fname')
         args = parser.parse_args(sys.argv[2:])
+
+        # Read the parameter file
         para = ATTPara(args.input_params)
-        para.input_params[args.section][args.key] = str2val(args.value)
+        
+        # Update the desired parameter
+        para.update_param(args.key, args.value)
+
+        # Write the parameter file
         para.write(fname=args.o)
 
 

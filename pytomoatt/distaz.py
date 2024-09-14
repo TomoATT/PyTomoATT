@@ -13,9 +13,9 @@ class DistAZ:
     :param lon1: Longitude of point 1
     :type lon1: float
     :param lat2: Latitude of point 2
-    :type lat2: float
+    :type lat2: float or np.ndarray
     :param lon2: Longitude of point 2
-    :type lon2: float
+    :type lon2: float or np.ndarray
     :return: An instance of DistAZ
     :rtype: DistAZ
 
@@ -105,7 +105,8 @@ class DistAZ:
 	c  Bullen, Sec 10.2, eqn. 4
 	c
         """
-        delrad = np.arccos(a * aa + b * bb + c * cc)
+        clamped_value = np.clip(a * aa + b * bb + c * cc, -1.0, 1.0)
+        delrad = np.arccos(clamped_value)
         self.delta = delrad / rad
         """
 	c

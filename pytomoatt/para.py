@@ -1,6 +1,5 @@
-# import yaml
 from ruamel.yaml import YAML
-from .utils.common import init_axis
+from .utils.common import init_axis, str2val
 
 yaml = YAML()
 
@@ -25,6 +24,18 @@ class ATTPara:
             self.input_params['domain']['n_rtp'],
         )
         return dep, lat, lon, dd, dt, dp
+    
+    def update_param(self, key: str, value) -> None:
+        """Update a parameter in the YAML file.
+        
+        :param key: The key of parameter file to be set. Use '.' to separate the keys.
+        :type key: str
+        """
+        keys = key.split('.')
+        param = self.input_params
+        for k in keys[:-1]:
+            param = param.setdefault(k, {})
+        param[keys[-1]] = str2val(value)
 
     def write(self, fname=None):
         """write
