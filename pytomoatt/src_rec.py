@@ -1485,7 +1485,7 @@ In this case, please set dist_in_data=True and read again."""
                     )
             elif shape == "gaussian":
                 noise = np.random.normal(
-                    loc=mean_in_sec, scale=range_in_sec, size=rec_type.shape[0]
+                    loc=mean_in_sec, scale=range_in_sec/3, size=rec_type.shape[0]
                 )
             rec_type["tt"] += noise
 
