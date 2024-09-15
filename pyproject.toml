@@ -1,0 +1,49 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "PyTomoATT"
+description = "Your project description"
+authors = [
+    { name = "Mijian Xu", email = "mijian.xu@ntu.edu.sg" },
+    { name = "Masaru Nagaso" }
+]
+license = { text = "GPL-3.0" }
+readme = "README.md"
+requires-python = ">=3.9,<4.0"
+
+dynamic = ["version"]
+
+classifiers = [
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+dependencies = [
+    "numpy>=1.19.0",
+    "pandas>=1.4.0",
+    "scipy",
+    "h5py",
+    "ruamel.yaml",
+    "xarray",
+    "tqdm",
+    "obspy",
+    "pyproj",
+    "scikit-learn",
+]
+
+[project.urls]
+"Homepage" = "https://your.project.homepage"
+
+
+[tool.hatch.version]
+path = "pytomoatt/_version.py"
+
+[tool.hatch.metadata]
+packages = [{ include = "pytomoatt" }]
+
+
+[project.scripts]
+pta = "pytomoatt.script:main"

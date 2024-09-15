@@ -1481,11 +1481,11 @@ In this case, please set dist_in_data=True and read again."""
                 range_in_sec = range_in_sec * np.sqrt(2)
             if shape == "uniform":
                 noise = np.random.uniform(
-                        low=mean_in_sec-range_in_sec, high=mean_in_sec+range_in_sec, size=self.rec_points.shape[0]
+                        low=mean_in_sec-range_in_sec, high=mean_in_sec+range_in_sec, size=rec_type.shape[0]
                     )
             elif shape == "gaussian":
                 noise = np.random.normal(
-                    loc=mean_in_sec, scale=range_in_sec, size=self.rec_points.shape[0]
+                    loc=mean_in_sec, scale=range_in_sec, size=rec_type.shape[0]
                 )
             rec_type["tt"] += noise
 

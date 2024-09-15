@@ -97,6 +97,9 @@ class ATTData():
                 attdata._data_retrieval(group_name=group_name, dataset_name=key)
         else:
             raise ValueError('Error format of dataset_name')
+        if attdata.format == 'hdf5':
+            attdata.fdata.close()
+            attdata.fgrid.close()
         return attdata
 
     def _read_data_hdf5(self, offset, n_points_total_sub, group_name, dataset_name):
