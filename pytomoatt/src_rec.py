@@ -220,8 +220,8 @@ class SrcRec:
         """
         sr = cls(fname=fname, **kwargs)
         alldf = pd.read_table(
-            fname, sep="\s+", header=None, comment="#"
-        )
+                fname, sep=r"\s+", header=None, comment="#", low_memory=False
+            )
 
         last_col_src = 12
         dd_col = 11
