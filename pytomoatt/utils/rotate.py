@@ -24,13 +24,6 @@ def xyz2rtp(x, y, z):
     """
     r = np.sqrt(x**2 + y**2 + z**2)
 
-    # Guard against division by zero
-    if (isinstance(r, np.ndarray)):
-        r[r == 0] = 1e-10  # Prevent division by zero; set small value for r.
-    else:
-        if r == 0:
-            r = 1e-10
-
     # theta = arctan(z / sqrt(x^2 + y^2))
     theta = np.arctan2(z, np.sqrt(x**2 + y**2))
 
@@ -48,21 +41,21 @@ def rotate_x(x,y,z,theta):
     new_x = x 
     new_y = y *  np.cos(theta*DEG2RAD) + z * -np.sin(theta*DEG2RAD)
     new_z = y *  np.sin(theta*DEG2RAD) + z *  np.cos(theta*DEG2RAD)
-    return (new_x,new_y,new_z)
+    return new_x, new_y, new_z
     
 # anti-clockwise rotation along y-axis
 def rotate_y(x,y,z,theta):
     new_x = x *  np.cos(theta*DEG2RAD) + z *  np.sin(theta*DEG2RAD)
     new_y = y
     new_z = x * -np.sin(theta*DEG2RAD) + z *  np.cos(theta*DEG2RAD)
-    return (new_x,new_y,new_z)
+    return new_x, new_y, new_z
 
 # anti-clockwise rotation along z-axis
 def rotate_z(x,y,z,theta):
     new_x = x *  np.cos(theta*DEG2RAD) + y * -np.sin(theta*DEG2RAD)
     new_y = x *  np.sin(theta*DEG2RAD) + y *  np.cos(theta*DEG2RAD)
     new_z = z 
-    return (new_x,new_y,new_z)
+    return new_x, new_y, new_z
 
 
 # rotate to the new coordinate, satisfying the center r0,t0,p0 -> r0,0,0 and a anticlockwise angle psi
@@ -80,9 +73,9 @@ def rtp_rotation(t,p,theta0,phi0,psi):
     (x,y,z) = rotate_x(x,y,z,psi)
 
     # step 5: x,y,z -> r,t,p
-    (new_r,new_t,new_p) = xyz2rtp(x,y,z)
+    _, new_t, new_p = xyz2rtp(x,y,z)
     
-    return (new_t,new_p)
+    return new_t, new_p
 
 
 def rtp_rotation_reverse(new_t,new_p,theta0,phi0,psi):
@@ -99,6 +92,6 @@ def rtp_rotation_reverse(new_t,new_p,theta0,phi0,psi):
     (x,y,z) = rotate_z(x,y,z,phi0)
 
     # step 5: x,y,z -> r,t,p
-    (r,t,p) = xyz2rtp(x,y,z)
+    _, t, p = xyz2rtp(x,y,z)
     
-    return (t,p)
+    return t, p
