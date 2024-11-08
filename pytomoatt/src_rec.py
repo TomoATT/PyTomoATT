@@ -160,7 +160,7 @@ class SrcRec:
         ================ =====================================================
         """
         return self._rec_points_cs
-    
+
     @rec_points_cs.setter
     def rec_points_cs(self, value):
         if value is None or isinstance(value, pd.DataFrame):
@@ -220,7 +220,7 @@ class SrcRec:
         """
         sr = cls(fname=fname, **kwargs)
         alldf = pd.read_table(
-            fname, sep="\s+", header=None, comment="#"
+            fname, sep=r"\s+", header=None, comment="#"
         )
 
         last_col_src = 12
@@ -323,7 +323,7 @@ In this case, please set dist_in_data=True and read again."""
             sr.rec_points.columns = cols
 
             sr.rec_points = sr.rec_points.astype(get_rec_points_types(dist_in_data))
-            
+
             if name_net_and_sta:
                 # concatenate network and station name with "."
                 sr.rec_points["staname"] = (
@@ -476,12 +476,12 @@ In this case, please set dist_in_data=True and read again."""
         :rtype: SrcRec
         """
         return copy.deepcopy(self)
-    
+
     def update_unique_src_rec(self):
         """
         Update unique sources and receivers
 
-        The unique sources and receivers are stored 
+        The unique sources and receivers are stored
         in ``SrcRec.sources`` and ``SrcRec.receivers`` respectively.
         """
         # get sources
@@ -550,7 +550,7 @@ In this case, please set dist_in_data=True and read again."""
                 dict(zip(self.src_points.index, new_index))
             )
             self.rec_points_cs.reset_index(drop=True, inplace=True)
-        
+
         if not self.rec_points_cr.empty:
             self.rec_points_cr["src_index"] = self.rec_points_cr["src_index"].map(
                 dict(zip(self.src_points.index, new_index))
@@ -586,7 +586,7 @@ In this case, please set dist_in_data=True and read again."""
 
         self.reset_index()
         sr.reset_index()
-        
+
         self.log.SrcReclog.info(f"src_points before appending: {self.src_points.shape[0]}")
         self.log.SrcReclog.info(f"rec_points before appending: {self._count_records()}")
         # number of sources to be added
@@ -619,7 +619,7 @@ In this case, please set dist_in_data=True and read again."""
                 self.rec_points_cs = pd.concat(
                     [self.rec_points_cs, sr.rec_points_cs], ignore_index=True
                 )
-            
+
             # append rec_points_cr
             if not sr.rec_points_cr.empty:
                 sr.rec_points_cr["src_index"] += n_src_offset
@@ -649,7 +649,7 @@ In this case, please set dist_in_data=True and read again."""
             self.rec_points_cr = self.rec_points_cr[
                 self.rec_points_cr['event_id2'].isin(self.src_points['event_id'])
             ]
-          
+
     def remove_src_by_new_rec(self):
         """remove src_points by new receivers"""
         self.src_points = self.src_points[
@@ -661,7 +661,7 @@ In this case, please set dist_in_data=True and read again."""
                 self.src_points.index.isin(self.rec_points_cr["src_index"])
             ]])
         if not self.rec_points_cs.empty:
-            self.src_points = pd.concat( 
+            self.src_points = pd.concat(
                 [self.src_points, self.src_points[
                 self.src_points.index.isin(self.rec_points_cs["src_index"])
             ]])
@@ -961,7 +961,7 @@ In this case, please set dist_in_data=True and read again."""
 
     def select_by_distance(self, dist_min_max, recalc_dist=False):
         """Select stations in a range of distance
-        
+
         .. note::
             This criteria only works for absolute travel time data.
 
@@ -994,7 +994,7 @@ In this case, please set dist_in_data=True and read again."""
 
     def select_by_azi_gap(self, max_azi_gap: float):
         """Select sources with azimuthal gap greater and equal than a number
-    
+
         :param azi_gap: threshold of minimum azimuthal gap
         :type azi_gap: float
         """
@@ -1013,8 +1013,8 @@ In this case, please set dist_in_data=True and read again."""
             az_diffs = np.diff(np.concatenate((sorted_az, [sorted_az[0] + 360])))
             return np.max(az_diffs)
         max_gap = self.rec_points.groupby('src_index').apply(lambda x: calc_azi_gap(x['az'].values))
-        self.src_points = self.src_points[(max_gap < max_azi_gap)]     
-        
+        self.src_points = self.src_points[(max_gap < max_azi_gap)]
+
         self.update()
         self.log.SrcReclog.info(
             "src_points after selection: {}".format(self.src_points.shape[0])
@@ -1084,7 +1084,7 @@ In this case, please set dist_in_data=True and read again."""
 
         # store index of src_points as 'src_index'
         # self.src_points["src_index"] = self.src_points.index
-        
+
         # group events by grid size
         self._evt_group(d_deg, d_km)
 
@@ -1221,7 +1221,7 @@ In this case, please set dist_in_data=True and read again."""
                 ),
                 axis=1,
             )
-        
+
         # assign weight to rec_points_cr
         # the weight is the average of the one receiver and the other source
         if not self.rec_points_cr.empty:
@@ -1409,7 +1409,7 @@ In this case, please set dist_in_data=True and read again."""
         dist_ref = scale * np.mean(dist)
         om = np.exp(-((dist / dist_ref) ** 2)) * points.shape[0]
         return 1 / np.mean(om, axis=0)
-    
+
     def _cal_dd_weight(self, w1, w2, dd_weight='average'):
         if dd_weight == "average":
             return (w1 + w2) / 2
@@ -1421,7 +1421,7 @@ In this case, please set dist_in_data=True and read again."""
     def geo_weighting(self, scale=0.5, obj="both", dd_weight="average"):
         """Calculating geographical weights for sources
 
-        :param scale: Scale of reference distance parameter. 
+        :param scale: Scale of reference distance parameter.
                       See equation 22 in Ruan et al., (2019). The reference distance is given by ``scale* dis_average``, defaults to 0.5
         :type scale: float, optional
         :param obj: Object to be weighted, options: ``src``, ``rec`` or ``both``, defaults to ``both``
@@ -1450,13 +1450,13 @@ In this case, please set dist_in_data=True and read again."""
             self.receivers['weight'] = weights
             for i, row in self.receivers.iterrows():
                 self.rec_points.loc[self.rec_points['staname'] == row['staname'], 'weight'] = row['weight']
-            
+
             if not self.rec_points_cs.empty:
                 for i, row in self.rec_points_cs.iterrows():
                     w1 = self.receivers.loc[self.receivers['staname'] == row['staname1'], 'weight'].values[0]
                     w2 = self.receivers.loc[self.receivers['staname'] == row['staname2'], 'weight'].values[0]
                     self.rec_points_cs.loc[i, 'weight'] = self._cal_dd_weight(w1, w2, dd_weight)
-            
+
             if not self.rec_points_cr.empty:
                 for i, row in self.rec_points_cr.iterrows():
                     w1 = self.receivers.loc[self.receivers['staname'] == row['staname'], 'weight'].values[0]
@@ -1515,14 +1515,14 @@ In this case, please set dist_in_data=True and read again."""
         for i, row in self.rec_points.iterrows():
             self.rec_points.loc[i, "stla"] = self.receivers[self.receivers["staname"] == row["staname"]]["stla"]
             self.rec_points.loc[i, "stlo"] = self.receivers[self.receivers["staname"] == row["staname"]]["stlo"]
-        
+
         if not self.rec_points_cs.empty:
             for i, row in self.rec_points_cs.iterrows():
                 self.rec_points_cs.loc[i, "stla1"] = self.receivers[self.receivers["staname"] == row["staname1"]]["stla"]
                 self.rec_points_cs.loc[i, "stlo1"] = self.receivers[self.receivers["staname"] == row["staname1"]]["stlo"]
                 self.rec_points_cs.loc[i, "stla2"] = self.receivers[self.receivers["staname"] == row["staname2"]]["stla"]
                 self.rec_points_cs.loc[i, "stlo2"] = self.receivers[self.receivers["staname"] == row["staname2"]]["stlo"]
-        
+
         if not self.rec_points_cr.empty:
             for i, row in self.rec_points_cr.iterrows():
                 self.rec_points_cr.loc[i, "stla"] = self.receivers[self.receivers["staname"] == row["staname"]]["stla"]
