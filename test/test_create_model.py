@@ -13,27 +13,23 @@ class TestATTModel():
         self.mod.write(self.out_fname)
 
     def test_checkerboard01(self):
-        para = ATTPara(self.para_fname)
-        cm = Checker(self.out_fname)
-        cm.init_axis(
-            para.input_params['domain']['min_max_dep'],
-            para.input_params['domain']['min_max_lat'],
-            para.input_params['domain']['min_max_lon'],
-            para.input_params['domain']['n_rtp']
-        )
+        cm = Checker(self.out_fname, self.para_fname)
         cm.checkerboard(2,2,2)
 
     def test_checkerboard02(self):
-        para = ATTPara(self.para_fname)
-        cm = Checker(self.out_fname)
-        cm.init_axis(
-            para.input_params['domain']['min_max_dep'],
-            para.input_params['domain']['min_max_lat'],
-            para.input_params['domain']['min_max_lon'],
-            para.input_params['domain']['n_rtp']
-        )
+        cm = Checker(self.out_fname, self.para_fname)
         cm.checkerboard(
             3,3,3,
+            lim_x=[-1, 1],
+            lim_y=[-0.5, 0.5],
+            lim_z=[10, 120]
+        )
+
+    def test_checkerboard03(self):
+        cm = Checker(self.out_fname, self.para_fname)
+        cm.checkerboard(
+            4,4,4,
+            ani_dir=70,
             lim_x=[-1, 1],
             lim_y=[-0.5, 0.5],
             lim_z=[10, 120]

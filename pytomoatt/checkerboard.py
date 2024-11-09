@@ -1,21 +1,31 @@
 import h5py
 import numpy as np
 from .utils.common import init_axis, sind, cosd
+from .para import ATTPara
 import copy
 
 
 class Checker():
     """Create checkerboard model by adding perturbations on an exist model
     """
-    def __init__(self, fname:str) -> None:
-        self.model_file = fname
-        with h5py.File(fname) as f:
+    def __init__(self, model_fname:str, para_fname='input_params.yml') -> None:
+        """Initialize Checker object
+        
+        :param fname: Path to initial model file
+        :type fname: str
+        :param para_fname: Path to parameter file, defaults to 'input_params.yml'
+        :type para_fname: str, optional
+        """
+        self.model_file = model_fname
+        self.para_fname = para_fname
+        with h5py.File(model_fname) as f:
             self.vel = f['vel'][:]
             self.eta = f['eta'][:]
             self.xi = f['xi'][:]
             self.zeta = f['zeta'][:]
+        self._init_axis()
 
-    def init_axis(self, min_max_dep, min_max_lat, min_max_lon, n_rtp):
+    def _init_axis(self):
         """Initialize axis
 
         :param min_max_dep: min and max depth, ``[min_dep, max_dep]``
@@ -27,6 +37,11 @@ class Checker():
         :param n_rtp: number of dimensions [ndep, nlat, nlon]
         :type n_rtp: list
         """
+        para = ATTPara(self.para_fname)
+        n_rtp = para.input_params['domain']['n_rtp']
+        min_max_dep = para.input_params['domain']['min_max_dep']
+        min_max_lat = para.input_params['domain']['min_max_lat']
+        min_max_lon = para.input_params['domain']['min_max_lon']
         self.dd, self.tt, self.pp, self.dr, self.dt, self.dp, = init_axis(
             min_max_dep, min_max_lat, min_max_lon, n_rtp
         )
