@@ -1,5 +1,6 @@
 name: Python Package using Conda
-
+permissions:
+  contents: write
 on:
   push:
     branches: [ devel ]
