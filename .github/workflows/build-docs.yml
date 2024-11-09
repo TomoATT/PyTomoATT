@@ -5,7 +5,11 @@ name: Build documentations
 
 on:
   push:
-    branches: [ "docs" ]
+    branches: [ "docs", "main" ]
+  workflow_run:
+    workflows: ["Upload Python Package"]
+    types:
+      - completed
   workflow_call:
     inputs:
       config-path:
