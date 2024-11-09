@@ -24,6 +24,7 @@ pytomoatt.src_rec
 
   ~SrcRec.add_noise
   ~SrcRec.append
+  ~SrcRec.box_weighting
   ~SrcRec.calc_distaz
   ~SrcRec.copy
   ~SrcRec.count_events_per_station
@@ -37,12 +38,16 @@ pytomoatt.src_rec
   ~SrcRec.remove_specified_recs
   ~SrcRec.remove_src_by_new_rec
   ~SrcRec.reset_index
+  ~SrcRec.rotate
+  ~SrcRec.select_by_azi_gap
   ~SrcRec.select_by_box_region
   ~SrcRec.select_by_datetime
   ~SrcRec.select_by_depth
   ~SrcRec.select_by_distance
-  ~SrcRec.select_one_event_in_each_subgrid
   ~SrcRec.select_by_phase
+  ~SrcRec.select_by_num_rec
+  ~SrcRec.select_one_event_in_each_subgrid
+  ~SrcRec.to_utm
   ~SrcRec.update
   ~SrcRec.update_num_rec
   ~SrcRec.write
