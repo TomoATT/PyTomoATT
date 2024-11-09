@@ -150,3 +150,66 @@ def setup_rec_points_dd(type='cs'):
     else:
         raise ValueError('type should be either "cs" or "cr"')
     return columns, data_type
+
+def update_position(sr):
+    sr.src_points = sr.src_points.merge(
+        sr.sources[['event_id', 'evlo', 'evla']],
+        on='event_id',
+        how='left',
+        suffixes=('', '_new')
+    )
+    sr.src_points['evlo'] = sr.src_points['evlo_new']
+    sr.src_points['evla'] = sr.src_points['evla_new']
+    sr.src_points.drop(columns=['evlo_new', 'evla_new'], inplace=True)
+
+    sr.rec_points = sr.rec_points.merge(
+        sr.receivers[['staname', 'stlo', 'stla']],
+        on='staname',
+        how='left',
+        suffixes=('', '_new')
+    )
+    sr.rec_points['stlo'] = sr.rec_points['stlo_new']
+    sr.rec_points['stla'] = sr.rec_points['stla_new']
+    sr.rec_points.drop(columns=['stlo_new', 'stla_new'], inplace=True)
+
+    if not sr.rec_points_cs.empty:
+        sr.rec_points_cs = sr.rec_points_cs.merge(
+            sr.receivers[['staname', 'stlo', 'stla']],
+            left_on='staname1',
+            right_on='staname',
+            how='left',
+        )
+        sr.rec_points_cs['stlo1'] = sr.rec_points_cs['stlo']
+        sr.rec_points_cs['stla1'] = sr.rec_points_cs['stla']
+        sr.rec_points_cs.drop(columns=['stlo', 'stla', 'staname'], inplace=True)
+
+        sr.rec_points_cs = sr.rec_points_cs.merge(
+            sr.receivers[['staname', 'stlo', 'stla']],
+            left_on='staname2',
+            right_on='staname',
+            how='left',
+        )
+        sr.rec_points_cs['stlo2'] = sr.rec_points_cs['stlo']
+        sr.rec_points_cs['stla2'] = sr.rec_points_cs['stla']
+        sr.rec_points_cs.drop(columns=['stlo', 'stla', 'staname'], inplace=True)
+
+    if not sr.rec_points_cr.empty:
+        sr.rec_points_cr = sr.rec_points_cr.merge(
+            sr.receivers[['staname', 'stlo', 'stla']],
+            on='staname',
+            how='left',
+            suffixes=('', '_new')
+        )
+        sr.rec_points_cr['stlo'] = sr.rec_points_cr['stlo_new']
+        sr.rec_points_cr['stla'] = sr.rec_points_cr['stla_new']
+        sr.rec_points_cr.drop(columns=['stlo_new', 'stla_new'], inplace=True)
+
+        sr.rec_points_cr = sr.rec_points_cr.merge(
+            sr.sources[['event_id', 'evlo', 'evla']],
+            left_on='event_id2',
+            right_on='event_id',
+            how='left',
+        )
+        sr.rec_points_cr['evlo2'] = sr.rec_points_cr['evlo']
+        sr.rec_points_cr['evla2'] = sr.rec_points_cr['evla']
+        sr.rec_points_cr.drop(columns=['evlo', 'evla', 'event_id'], inplace=True)

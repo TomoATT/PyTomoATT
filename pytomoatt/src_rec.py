@@ -3,7 +3,7 @@ import tqdm
 import pandas as pd
 from .distaz import DistAZ
 from .setuplog import SetupLog
-from .utils.src_rec_utils import define_rec_cols, setup_rec_points_dd, get_rec_points_types
+from .utils.src_rec_utils import define_rec_cols, setup_rec_points_dd, get_rec_points_types, update_position
 from sklearn.metrics.pairwise import haversine_distances
 import copy
 
@@ -220,8 +220,8 @@ class SrcRec:
         """
         sr = cls(fname=fname, **kwargs)
         alldf = pd.read_table(
-            fname, sep="\s+", header=None, comment="#"
-        )
+                fname, sep=r"\s+", header=None, comment="#", low_memory=False
+            )
 
         last_col_src = 12
         dd_col = 11
@@ -1489,7 +1489,7 @@ In this case, please set dist_in_data=True and read again."""
                 )
             rec_type["tt"] += noise
 
-    def rotate(self, clat:float, clon:float, angle:float):
+    def rotate(self, clat:float, clon:float, angle:float, reverse=False):
         """Rotate sources and receivers around a center point
 
         :param clat: Latitude of the center
@@ -1499,36 +1499,19 @@ In this case, please set dist_in_data=True and read again."""
         :param angle: anti-clockwise angle in degree
         :type angle: float
         """
-        from .utils.rotate import rtp_rotation
+        from .utils.rotate import rtp_rotation, rtp_rotation_reverse
 
-        self.sources["evla"], self.sources["evlo"] = rtp_rotation(
-            self.sources["evla"], self.sources["evlo"], clat, clon, angle
-        )
-        for i, row in self.src_points.iterrows():
-            self.src_points.loc[i, "evla"], self.src_points.loc[i, "evlo"] = rtp_rotation(
-                row["evla"], row["evlo"], clat, clon, angle
-            )
+        rotation_func = rtp_rotation_reverse if reverse else rtp_rotation
 
-        self.receivers["stla"], self.receivers["stlo"] = rtp_rotation(
-            self.receivers["stla"], self.receivers["stlo"], clat, clon, angle
+        self.sources["evla"], self.sources["evlo"] = rotation_func(
+            self.sources["evla"].to_numpy(), self.sources["evlo"].to_numpy(), clat, clon, angle
         )
-        for i, row in self.rec_points.iterrows():
-            self.rec_points.loc[i, "stla"] = self.receivers[self.receivers["staname"] == row["staname"]]["stla"]
-            self.rec_points.loc[i, "stlo"] = self.receivers[self.receivers["staname"] == row["staname"]]["stlo"]
-        
-        if not self.rec_points_cs.empty:
-            for i, row in self.rec_points_cs.iterrows():
-                self.rec_points_cs.loc[i, "stla1"] = self.receivers[self.receivers["staname"] == row["staname1"]]["stla"]
-                self.rec_points_cs.loc[i, "stlo1"] = self.receivers[self.receivers["staname"] == row["staname1"]]["stlo"]
-                self.rec_points_cs.loc[i, "stla2"] = self.receivers[self.receivers["staname"] == row["staname2"]]["stla"]
-                self.rec_points_cs.loc[i, "stlo2"] = self.receivers[self.receivers["staname"] == row["staname2"]]["stlo"]
-        
-        if not self.rec_points_cr.empty:
-            for i, row in self.rec_points_cr.iterrows():
-                self.rec_points_cr.loc[i, "stla"] = self.receivers[self.receivers["staname"] == row["staname"]]["stla"]
-                self.rec_points_cr.loc[i, "stlo"] = self.receivers[self.receivers["staname"] == row["staname"]]["stlo"]
-                self.rec_points_cr.loc[i, "evla2"] = self.sources[self.sources["event_id"] == row["event_id2"]]["evla"]
-                self.rec_points_cr.loc[i, "evlo2"] = self.sources[self.sources["event_id"] == row["event_id2"]]["evlo"]
+
+        self.receivers["stla"], self.receivers["stlo"] = rotation_func(
+            self.receivers["stla"].to_numpy(), self.receivers["stlo"].to_numpy(), clat, clon, angle
+        )
+
+        update_position(self)
 
     def to_utm(self, zone):
         """Convert sources and receivers to UTM coordinates
@@ -1547,68 +1530,8 @@ In this case, please set dist_in_data=True and read again."""
             self.receivers["stlo"], self.receivers["stla"]
         )
 
-        self.src_points = self.src_points.merge(
-            self.sources[['event_id', 'evlo', 'evla']],
-            on='event_id',
-            how='left',
-            suffixes=('', '_new')
-        )
-        self.src_points['evlo'] = self.src_points['evlo_new']
-        self.src_points['evla'] = self.src_points['evla_new']
-        self.src_points.drop(columns=['evlo_new', 'evla_new'], inplace=True)
-
-        self.rec_points = self.rec_points.merge(
-            self.receivers[['staname', 'stlo', 'stla']],
-            on='staname',
-            how='left',
-            suffixes=('', '_new')
-        )
-        self.rec_points['stlo'] = self.rec_points['stlo_new']
-        self.rec_points['stla'] = self.rec_points['stla_new']
-        self.rec_points.drop(columns=['stlo_new', 'stla_new'], inplace=True)
-
-        if not self.rec_points_cs.empty:
-            self.rec_points_cs = self.rec_points_cs.merge(
-                self.receivers[['staname', 'stlo', 'stla']],
-                left_on='staname1',
-                right_on='staname',
-                how='left',
-            )
-            self.rec_points_cs['stlo1'] = self.rec_points_cs['stlo']
-            self.rec_points_cs['stla1'] = self.rec_points_cs['stla']
-            self.rec_points_cs.drop(columns=['stlo', 'stla', 'staname'], inplace=True)
-
-            self.rec_points_cs = self.rec_points_cs.merge(
-                self.receivers[['staname', 'stlo', 'stla']],
-                left_on='staname2',
-                right_on='staname',
-                how='left',
-            )
-            self.rec_points_cs['stlo2'] = self.rec_points_cs['stlo']
-            self.rec_points_cs['stla2'] = self.rec_points_cs['stla']
-            self.rec_points_cs.drop(columns=['stlo', 'stla', 'staname'], inplace=True)
-
-        if not self.rec_points_cr.empty:
-            self.rec_points_cr = self.rec_points_cr.merge(
-                self.receivers[['staname', 'stlo', 'stla']],
-                on='staname',
-                how='left',
-                suffixes=('', '_new')
-            )
-            self.rec_points_cr['stlo'] = self.rec_points_cr['stlo_new']
-            self.rec_points_cr['stla'] = self.rec_points_cr['stla_new']
-            self.rec_points_cr.drop(columns=['stlo_new', 'stla_new'], inplace=True)
-
-            self.rec_points_cr = self.rec_points_cr.merge(
-                self.sources[['event_id', 'evlo', 'evla']],
-                left_on='event_id2',
-                right_on='event_id',
-                how='left',
-            )
-            self.rec_points_cr['evlo2'] = self.rec_points_cr['evlo']
-            self.rec_points_cr['evla2'] = self.rec_points_cr['evla']
-            self.rec_points_cr.drop(columns=['evlo', 'evla', 'event_id'], inplace=True)
-
+        update_position(self)
+        
     def write_receivers(self, fname: str):
         """
         Write receivers to a txt file.

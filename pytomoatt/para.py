@@ -2,6 +2,7 @@ from ruamel.yaml import YAML
 from .utils.common import init_axis, str2val
 
 yaml = YAML()
+yaml.default_flow_style = True
 
 class ATTPara:
     """Class for read and write parameter file with ``yaml`` format
@@ -24,10 +25,10 @@ class ATTPara:
             self.input_params['domain']['n_rtp'],
         )
         return dep, lat, lon, dd, dt, dp
-    
+
     def update_param(self, key: str, value) -> None:
         """Update a parameter in the YAML file.
-        
+
         :param key: The key of parameter file to be set. Use '.' to separate the keys.
         :type key: str
         """

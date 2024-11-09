@@ -136,21 +136,38 @@ def ignore_nan_3d(data):
     xidx = np.arange(data.shape[2])
     zz, xx, yy = np.meshgrid(zidx, yidx, xidx, indexing='ij')
     interpolated = griddata(
-        points, values, 
-        (zz, xx, yy), 
+        points, values,
+        (zz, xx, yy),
         method='nearest'
     )
     result = interpolated.reshape(data.shape)
     return result
 
 def str2val(str_val):
+    # single value handling
+    # return integer
     try:
         return int(str_val)
     except ValueError:
-        try:
-            return float(str_val)
-        except ValueError:
-            try:
-                return [float(v) for v in str_val.strip('[]').split(',')]
-            except ValueError:
-                return str_val
+        pass
+
+    # return float
+    try:
+        return float(str_val)
+    except ValueError:
+        pass
+
+    # list values handling
+    # return list of integer
+    try:
+        return [int(v) for v in str_val.strip('[]').split(',')]
+    except ValueError:
+        pass
+
+    # return list of float
+    try:
+        return [float(v) for v in str_val.strip('[]').split(',')]
+    except ValueError:
+        pass
+
+    return str_val

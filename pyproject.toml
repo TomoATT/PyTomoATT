@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "PyTomoATT"
 description = "Your project description"
 authors = [
-    { name = "Mijian Xu", email = "mijian.xu@ntu.edu.sg" },
+    { name = "Mijian Xu", email = "gomijianxu@gmail.com" },
     { name = "Masaru Nagaso" }
 ]
 license = { text = "GPL-3.0" }

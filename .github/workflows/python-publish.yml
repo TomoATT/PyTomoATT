@@ -7,13 +7,11 @@
 # documentation.
 
 name: Upload Python Package
-
-on:
-  pull_request:
-    branches: [ main ]
-
 permissions:
-  contents: read
+  contents: write
+on:
+  push:
+    branches: [ main ]
 
 jobs:
   deploy:
@@ -37,11 +35,5 @@ jobs:
       with:
         user: __token__
         password: ${{ secrets.PYPI_API_TOKEN }}
-      
-  # Build_docs:
-  #   needs: deploy
-  #   uses: MIGG-NTU/PyTomoATT/.github/workflows/build-docs.yml@devel
-  #   with:
-  #     config-path: .github/workflows/build-docs.yml
-  #   secrets: inherit
+
 
