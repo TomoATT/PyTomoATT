@@ -6,6 +6,7 @@ from .setuplog import SetupLog
 from .utils.src_rec_utils import define_rec_cols, setup_rec_points_dd, get_rec_points_types, update_position
 from sklearn.metrics.pairwise import haversine_distances
 import copy
+from io import StringIO
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -385,89 +386,90 @@ In this case, please set dist_in_data=True and read again."""
         :param fname: Path to the src_rec file, defaults to 'src_rec_file'
         :type fname: str, optional
         """
-        with open(fname, "w") as f:
-            for idx, src in tqdm.tqdm(
-                self.src_points.iterrows(),
-                total=len(self.src_points),
-                desc="Writing src_rec file",
-            ):
-                time_lst = (
-                    src["origin_time"].strftime("%Y_%m_%d_%H_%M_%S.%f").split("_")
-                )
-                f.write(
-                    "{:d} {} {} {} {} {} {} {:.4f} {:.4f} {:.4f} {:.4f} {} {} {:.4f}\n".format(
+        output = StringIO()
+        src_points = self.src_points
+        rec_points = self.rec_points
+        rec_points_cs = self.rec_points_cs
+        rec_points_cr = self.rec_points_cr
+
+        for src in tqdm.tqdm(
+            src_points.itertuples(),
+            total=src_points.shape[0],
+            desc="Writing src_rec file",
+        ):
+            idx = src.Index
+            time_lst = (
+                src.origin_time.strftime("%Y_%m_%d_%H_%M_%S.%f").split("_")
+            )
+            output.write("{:d} {} {} {} {} {} {} {:.4f} {:.4f} {:.4f} {:.4f} {} {} {:.4f}\n".format(
+                    idx,
+                    *time_lst,
+                    src.evla,
+                    src.evlo,
+                    src.evdp,
+                    src.mag,
+                    src.num_rec,
+                    src.event_id,
+                    src.weight,
+                ))
+
+            if self.src_only:
+                continue
+
+            rec_data = rec_points[rec_points["src_index"] == idx]
+            for rec in rec_data.itertuples():
+                output.write("   {:d} {:d} {} {:6.4f} {:6.4f} {:6.4f} {} {:6.4f} {:6.4f}\n".format(
                         idx,
-                        *time_lst,
-                        src["evla"],
-                        src["evlo"],
-                        src["evdp"],
-                        src["mag"],
-                        src["num_rec"],
-                        src["event_id"],
-                        src["weight"],
-                    )
-                )
-                if self.src_only:
-                    continue
-                rec_data = self.rec_points[self.rec_points["src_index"] == idx]
-                for _, rec in rec_data.iterrows():
-                    f.write(
-                        "   {:d} {:d} {} {:6.4f} {:6.4f} {:6.4f} {} {:6.4f} {:6.4f}\n".format(
+                        rec.rec_index,
+                        rec.staname,
+                        rec.stla,
+                        rec.stlo,
+                        rec.stel,
+                        rec.phase,
+                        rec.tt,
+                        rec.weight,
+                    ))
+
+            if not rec_points_cs.empty:
+                rec_data = rec_points_cs[rec_points_cs["src_index"] == idx]
+                for rec in rec_data.itertuples():
+                    output.write("   {:d} {:d} {} {:6.4f} {:6.4f} {:6.4f} {:d} {} {:6.4f} {:6.4f} {:6.4f} {} {:.4f} {:6.4f}\n".format(
                             idx,
-                            rec["rec_index"],
-                            rec["staname"],
-                            rec["stla"],
-                            rec["stlo"],
-                            rec["stel"],
-                            rec["phase"],
-                            rec["tt"],
-                            rec["weight"],
-                        )
-                    )
-                if not self.rec_points_cs.empty:
-                    rec_data = self.rec_points_cs[self.rec_points_cs["src_index"] == idx]
-                    for _, rec in rec_data.iterrows():
-                        f.write(
-                            "   {:d} {:d} {} {:6.4f} {:6.4f} {:6.4f} "
-                            " {:d} {} {:6.4f} {:6.4f} {:6.4f} {} {:.4f} {:6.4f}\n".format(
-                                idx,
-                                rec["rec_index1"],
-                                rec["staname1"],
-                                rec["stla1"],
-                                rec["stlo1"],
-                                rec["stel1"],
-                                rec["rec_index2"],
-                                rec['staname2'],
-                                rec['stla2'],
-                                rec['stlo2'],
-                                rec['stel2'],
-                                rec["phase"],
-                                rec["tt"],
-                                rec["weight"],
-                            )
-                        )
-                if not self.rec_points_cr.empty:
-                    rec_data = self.rec_points_cr[self.rec_points_cr["src_index"] == idx]
-                    for _, rec in rec_data.iterrows():
-                        f.write(
-                            "   {:d} {:d} {} {:6.4f} {:6.4f} {:6.4f} "
-                            " {:d} {} {:6.4f} {:6.4f} {:6.4f} {} {:.4f} {:6.4f}\n".format(
-                                idx,
-                                rec["rec_index"],
-                                rec["staname"],
-                                rec["stla"],
-                                rec["stlo"],
-                                rec["stel"],
-                                rec["src_index2"],
-                                rec['event_id2'],
-                                rec['evla2'],
-                                rec['evlo2'],
-                                rec['evdp2'],
-                                rec["phase"],
-                                rec["tt"],
-                                rec["weight"],
-                            )
-                        )
+                            rec.rec_index1,
+                            rec.staname1,
+                            rec.stla1,
+                            rec.stlo1,
+                            rec.stel1,
+                            rec.rec_index2,
+                            rec.staname2,
+                            rec.stla2,
+                            rec.stlo2,
+                            rec.stel2,
+                            rec.phase,
+                            rec.tt,
+                            rec.weight,
+                        ))
+            if not rec_points_cr.empty:
+                rec_data = rec_points_cr[rec_points_cr["src_index"] == idx]
+                for rec in rec_data.itertuples():
+                    output.write("   {:d} {:d} {} {:6.4f} {:6.4f} {:6.4f} {:d} {} {:6.4f} {:6.4f} {:6.4f} {} {:.4f} {:6.4f}\n".format(
+                            idx,
+                            rec.rec_index,
+                            rec.staname,
+                            rec.stla,
+                            rec.stlo,
+                            rec.stel,
+                            rec.src_index2,
+                            rec.event_id2,
+                            rec.evla2,
+                            rec.evlo2,
+                            rec.evdp2,
+                            rec.phase,
+                            rec.tt,
+                            rec.weight,
+                        ))
+        with open(fname, "w") as f:
+            f.write(output.getvalue())
 
     def copy(self):
         """Return a copy of SrcRec object
