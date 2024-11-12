@@ -39,8 +39,9 @@ class SrcRec:
         return f"PyTomoATT SrcRec Object: \n\
                 fnames={self.fnames}, \n\
                 src_only={self.src_only}, \n\
-                number of sources={self.src_points.shape[0]}, \n\
-                number of receivers={self.rec_points.shape[0]}"
+                number of sources={self.sources.shape[0]}, \n\
+                number of receivers={self.receivers.shape[0]}\n\
+                number of traces={self.rec_points.shape[0]+self.rec_points_cs.shape[0]+self.rec_points_cr.shape[0]}"
 
     @property
     def src_points(self):
