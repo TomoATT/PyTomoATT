@@ -4,8 +4,8 @@ import numpy as np
 from os.path import join, basename, dirname
 try:
     from obspy.io.sac import SACTrace
-except ImportError:
-    raise ImportError('ObsPy is required for Seispy I/O')
+except ImportError as e:
+    raise ImportError('ObsPy is required for Seispy I/O \n{}'.format(e))
 
 class Seispy:
     def __init__(self, rf_path:str):
