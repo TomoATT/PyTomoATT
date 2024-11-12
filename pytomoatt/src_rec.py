@@ -1362,12 +1362,12 @@ In this case, please set dist_in_data=True and read again."""
         src_dp = self.src_points["evdp"].values
         src_weights = self.src_points["weight"].values
         results = []
-        for i, rec in tqdm.tqdm(
-                self.receivers.iterrows(),
+        for rec in tqdm.tqdm(
+                self.receivers.itertuples(index=False),
                 total=len(self.receivers),
                 desc="Generating cr"
             ):
-            rec_data = self.rec_points[self.rec_points["staname"] == rec["staname"]]
+            rec_data = self.rec_points[self.rec_points["staname"] == rec.staname]
             if rec_data.shape[0] < 2:
                 continue
             baz_values = rec_data['baz'].values
@@ -1386,10 +1386,10 @@ In this case, please set dist_in_data=True and read again."""
                         data_row = {
                             "src_index": src_indices[i],
                             "rec_index": rec_indices[i],
-                            "staname": rec["staname"],
-                            "stla": rec["stla"],
-                            "stlo": rec["stlo"],
-                            "stel": rec["stel"],
+                            "staname": rec.staname,
+                            "stla": rec.stla,
+                            "stlo": rec.stlo,
+                            "stel": rec.stel,
                             "src_index2": src_index,
                             "event_id2": src_id[src_index],
                             "evla2": src_la[src_index],
@@ -1397,7 +1397,6 @@ In this case, please set dist_in_data=True and read again."""
                             "evdp2": src_dp[src_index],
                             "phase": f"{rec_phases[i]},cr",
                             "tt": tts[i] - tts[j],
-                            # "weight": (src_weights[src_index]+rec_weights[i])/2,
                             "weight": self._cal_dd_weight(src_weights[src_index], rec_weights[i], dd_weight),
                         }
                         results.append(data_row)
@@ -1461,20 +1460,20 @@ In this case, please set dist_in_data=True and read again."""
             )
             # apply weights to rec_points
             self.receivers['weight'] = weights
-            for i, row in self.receivers.iterrows():
-                self.rec_points.loc[self.rec_points['staname'] == row['staname'], 'weight'] = row['weight']
-            
+            for row in self.receivers.itertuples(index=False):
+                self.rec_points.loc[self.rec_points['staname'] == row.staname, 'weight'] = row.weight
+
             if not self.rec_points_cs.empty:
-                for i, row in self.rec_points_cs.iterrows():
-                    w1 = self.receivers.loc[self.receivers['staname'] == row['staname1'], 'weight'].values[0]
-                    w2 = self.receivers.loc[self.receivers['staname'] == row['staname2'], 'weight'].values[0]
-                    self.rec_points_cs.loc[i, 'weight'] = self._cal_dd_weight(w1, w2, dd_weight)
-            
+                for row in self.rec_points_cs.itertuples(index=True):
+                    w1 = self.receivers.loc[self.receivers['staname'] == row.staname1, 'weight'].values[0]
+                    w2 = self.receivers.loc[self.receivers['staname'] == row.staname2, 'weight'].values[0]
+                    self.rec_points_cs.loc[row.Index, 'weight'] = self._cal_dd_weight(w1, w2, dd_weight)
+
             if not self.rec_points_cr.empty:
-                for i, row in self.rec_points_cr.iterrows():
-                    w1 = self.receivers.loc[self.receivers['staname'] == row['staname'], 'weight'].values[0]
-                    w2 = self.src_points.loc[self.src_points['event_id'] == row['event_id2'], 'weight'].values[0]
-                    self.rec_points_cr.loc[i, 'weight'] = self._cal_dd_weight(w1, w2, dd_weight)
+                for row in self.rec_points_cr.itertuples(index=True):
+                    w1 = self.receivers.loc[self.receivers['staname'] == row.staname, 'weight'].values[0]
+                    w2 = self.src_points.loc[self.src_points['event_id'] == row.event_id2, 'weight'].values[0]
+                    self.rec_points_cr.loc[row.Index, 'weight'] = self._cal_dd_weight(w1, w2, dd_weight)
 
     def add_noise(self, range_in_sec=0.1, mean_in_sec=0.0, shape="gaussian"):
         """Add random noise on travel time
