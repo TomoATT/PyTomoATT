@@ -1025,7 +1025,7 @@ In this case, please set dist_in_data=True and read again."""
             sorted_az = np.sort(az)
             az_diffs = np.diff(np.concatenate((sorted_az, [sorted_az[0] + 360])))
             return np.max(az_diffs)
-        max_gap = self.rec_points.groupby('src_index').apply(lambda x: calc_azi_gap(x['az'].values))
+        max_gap = self.rec_points.groupby('src_index')['az'].apply(lambda x: calc_azi_gap(x.values))
         self.src_points = self.src_points[(max_gap < max_azi_gap)]     
         
         self.update()
