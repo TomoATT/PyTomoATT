@@ -2,8 +2,10 @@ import glob
 import pandas as pd
 import numpy as np
 from os.path import join, basename, dirname
-from obspy.io.sac import SACTrace
-
+try:
+    from obspy.io.sac import SACTrace
+except ImportError:
+    raise ImportError('ObsPy is required for Seispy I/O')
 
 class Seispy:
     def __init__(self, rf_path:str):

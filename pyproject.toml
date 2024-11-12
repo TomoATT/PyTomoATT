@@ -29,13 +29,12 @@ dependencies = [
     "ruamel.yaml",
     "xarray",
     "tqdm",
-    "obspy",
     "pyproj",
     "scikit-learn",
 ]
 
 [project.urls]
-"Homepage" = "https://your.project.homepage"
+"Homepage" = "https://tomoatt.com/"
 
 
 [tool.hatch.version]

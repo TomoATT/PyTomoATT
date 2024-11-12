@@ -3,10 +3,13 @@ import tqdm
 import pandas as pd
 from .distaz import DistAZ
 from .setuplog import SetupLog
-from .utils.src_rec_utils import define_rec_cols, setup_rec_points_dd, get_rec_points_types, update_position
+from .utils.src_rec_utils import define_rec_cols, setup_rec_points_dd, \
+                                 get_rec_points_types, update_position, \
+                                 download_src_rec_file
 from sklearn.metrics.pairwise import haversine_distances
 import copy
 from io import StringIO
+import os
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -220,7 +223,15 @@ class SrcRec:
         :rtype: SrcRec
         """
         sr = cls(fname=fname, **kwargs)
-        alldf = pd.read_table(
+        if not os.path.exists(fname):
+            sr.log.SrcReclog.info("Downloading src_rec file from {}".format(fname))
+            src_rec_data = download_src_rec_file(fname)
+            if src_rec_data is None:
+                sr.log.SrcReclog.error("No src_rec file found")
+                return sr
+        else:
+            src_rec_data = fname 
+        alldf = pd.read_csv(
                 fname, sep=r"\s+", header=None, comment="#", low_memory=False
             )
 
@@ -1490,6 +1501,24 @@ In this case, please set dist_in_data=True and read again."""
                     loc=mean_in_sec, scale=range_in_sec, size=rec_type.shape[0]
                 )
             rec_type["tt"] += noise
+
+    def add_noise_to_source(self, lat_pert=0.1, lon_pert=0.1, depth_pert=10, tau_pert=0.5):
+        """Add random noise on source location
+
+        :param lat_pert: Maximum perturbation on latitude in degree, defaults to 0.1
+        :type lat_pert: float, optional
+        :param lon_pert: Maximum perturbation on longitude in degree, defaults to 0.1
+        :type lon_pert: float, optional
+        :param depth_pert: Maximum perturbation on depth in km, defaults to 10
+        :type depth_pert: float, optional
+        :param tau_pert: Maximum perturbation on origin time in sec, defaults to 0.0
+        :type tau_pert: float, optional
+        """
+        self.log.SrcReclog.info("Adding noise on source location...")
+        self.src_points["evla"] += np.random.uniform(-lat_pert, lat_pert, self.src_points.shape[0])
+        self.src_points["evlo"] += np.random.uniform(-lon_pert, lon_pert, self.src_points.shape[0])
+        self.src_points["evdp"] += np.random.uniform(-depth_pert, depth_pert, self.src_points.shape[0])
+        self.src_points["origin_time"] +=  pd.to_timedelta(np.random.uniform(-tau_pert, tau_pert, self.src_points.shape[0]))
 
     def rotate(self, clat:float, clon:float, angle:float, reverse=False):
         """Rotate sources and receivers around a center point
