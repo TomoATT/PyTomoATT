@@ -43,10 +43,10 @@ jobs:
           channels: conda-forge
       - name: Install dependencies
         run: |
-          conda install numpy scipy h5py pandas xarray hatchling tqdm obspy
+          conda install hatchling 
           python -m pip install --upgrade pip
+          pip install pytest pytest-cov obspy
           pip install .
-          pip install pytest pytest-cov
       - name: test
         run: |
           cd test
