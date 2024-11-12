@@ -1,5 +1,6 @@
 import urllib3
 import io
+import tqdm
 
 
 def define_rec_cols(dist_in_data, name_net_and_sta):
@@ -226,12 +227,15 @@ def download_src_rec_file(url):
     response = http.request('GET', url, preload_content=False)
     if response.status == 200:
         data = io.StringIO()
-        while True:
-            chunk = response.read(1024)
-            if not chunk:
-                break
-            data.write(chunk.decode('utf-8'))
-        data.seek(0)  # 重置 StringIO 对象的指针到开始位置
+        total_size = int(response.headers.get('Content-Length', 0))
+        with tqdm.tqdm(total=total_size, unit='KB', unit_scale=True, desc='Downloading') as pbar:
+            while True:
+                chunk = response.read(1024)
+                if not chunk:
+                    break
+                data.write(chunk.decode('utf-8'))
+                pbar.update(len(chunk))
+        data.seek(0)  
         response.release_conn()
         return data
     else:
