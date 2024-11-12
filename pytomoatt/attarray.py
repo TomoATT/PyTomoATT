@@ -78,7 +78,7 @@ class Dataset(xarray.Dataset):
         """
         # Initialize a profile
         g = Geod(ellps='WGS84')
-        az, _, dist = g.inv(start_point[0],start_point[1],end_point[0],end_point[1])
+        az, _, dist = g.inv(start_point[0],start_point[1],end_point[0],end_point[1], return_back_azimuth=True)
         sec_range = np.arange(0, dist/1000, val)
         r = g.fwd_intermediate(start_point[0],start_point[1], az, npts=sec_range.size, del_s=val*1000)
 
