@@ -66,21 +66,23 @@ class Checker():
                      lim_x=None, lim_y=None, lim_z=None):
         """Create checkerboard
 
-        :param period_x: Multiple of period along X, e.g., set to 1 for 2 anomalies
-        :type period_x: float
-        :param period_y: Multiple of period along Y
-        :type period_y: float
-        :param period_z: Multiple of period along Z
-        :type period_z: float
-        :param pert_vel: Perturbation for velocity, defaults to 0.08
+        :param n_pert_x: Multiple of period along X, e.g., set to 1 for 2 anomalies
+        :type n_pert_x: float
+        :param n_pert_y: Multiple of period along Y
+        :type n_pert_y: float
+        :param n_pert_z: Multiple of period along Z
+        :type n_pert_z: float
+        :param pert_vel: Perturbation for velocity, defaults to ``0.08``
         :type pert_vel: float, optional
-        :param pert_ani: Perturbation for anisotropy, defaults to 0.04
+        :param pert_ani: Perturbation for anisotropy, defaults to ``0.04``
         :type pert_ani: float, optional
-        :param lim_x: Left and right bound along X, defaults to None
+        :param ani_dir: Direction of fast velocity direction, defaults to ``45``
+        :type ani_dir: float, optional
+        :param lim_x: Left and right bound along X, defaults to ``None``
         :type lim_x: list, optional
-        :param lim_y: Left and right bound along Y, defaults to None
+        :param lim_y: Left and right bound along Y, defaults to ``None``
         :type lim_y: list, optional
-        :param lim_z: Left and right bound along Z, defaults to None
+        :param lim_z: Left and right bound along Z, defaults to ``None``
         :type lim_z: list, optional
         """
         if lim_x is not None:
