@@ -36,7 +36,6 @@ jobs:
       - name: Setup Mambaforge
         uses: conda-incubator/setup-miniconda@v3
         with:
-          python-version: "3.12"
           channels: conda-forge,defaults
           environment-file: environment.yml
 
