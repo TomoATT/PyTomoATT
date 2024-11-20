@@ -37,8 +37,7 @@ jobs:
         uses: conda-incubator/setup-miniconda@v3
         with:
           python-version: 3.12
-          channels: conda-forge
-          channel-priority: true
+          channels: conda-forge,defaults
           environment-file: environment.yml
 
       - name: Build docs
