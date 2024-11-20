@@ -6,7 +6,7 @@ permissions:
   contents: write
 on:
   push:
-    branches: [ "docs", "main" ]
+    branches: [ "docs"]
   workflow_run:
     workflows: ["Upload Python Package"]
     types:
@@ -29,17 +29,15 @@ jobs:
         uses: styfle/cancel-workflow-action@0.9.1
 
       - name: Checkout
-        uses: actions/checkout@v2.4.0
+        uses: actions/checkout@v4
         with:
           ref: docs
 
       - name: Setup Mambaforge
-        uses: conda-incubator/setup-miniconda@v2.1.1
+        uses: conda-incubator/setup-miniconda@v3
         with:
-          activate-environment: docs
+          channels: conda-forge
           environment-file: environment.yml
-          miniforge-variant: Mambaforge
-          use-mamba: true
 
       - name: Build docs
         run: |
