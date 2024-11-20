@@ -57,7 +57,7 @@ class ATTData():
         :type group_name: str
         :param dataset_name: Name of the dataset in the HDF5 file
         :type dataset_name: str
-        :param format: Format of the data file, defaults to 'hdf5'
+        :param format: Format of the data file, defaults to ``hdf5``
         :type format: str, optional
         :return: An instance of ATTData
         :rtype: ATTData
@@ -189,7 +189,7 @@ class ATTData():
         """Convert to attarray.Dataset
 
         :return: A multi-dimensional data base inheriting from xarray.Dataset
-        :rtype: attarray.DataSet
+        :rtype: pytomoatt.attarray.Dataset
         """
         depths = 6371. - self.grid_glob_r[:, 0, 0]
         radius = self.grid_glob_r[:, 0, 0]

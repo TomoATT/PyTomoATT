@@ -3,9 +3,13 @@ import tqdm
 import pandas as pd
 from .distaz import DistAZ
 from .setuplog import SetupLog
-from .utils.src_rec_utils import define_rec_cols, setup_rec_points_dd, get_rec_points_types, update_position
+from .utils.src_rec_utils import define_rec_cols, setup_rec_points_dd, \
+                                 get_rec_points_types, update_position, \
+                                 download_src_rec_file
 from sklearn.metrics.pairwise import haversine_distances
 import copy
+from io import StringIO
+import os
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -35,8 +39,9 @@ class SrcRec:
         return f"PyTomoATT SrcRec Object: \n\
                 fnames={self.fnames}, \n\
                 src_only={self.src_only}, \n\
-                number of sources={self.src_points.shape[0]}, \n\
-                number of receivers={self.rec_points.shape[0]}"
+                number of sources={self.sources.shape[0]}, \n\
+                number of receivers={self.receivers.shape[0]}\n\
+                number of traces={self.rec_points.shape[0]+self.rec_points_cs.shape[0]+self.rec_points_cr.shape[0]}"
 
     @property
     def src_points(self):
@@ -219,7 +224,15 @@ class SrcRec:
         :rtype: SrcRec
         """
         sr = cls(fname=fname, **kwargs)
-        alldf = pd.read_table(
+        if not os.path.exists(fname):
+            sr.log.SrcReclog.info("Downloading src_rec file from {}".format(fname))
+            src_rec_data = download_src_rec_file(fname)
+            if src_rec_data is None:
+                sr.log.SrcReclog.error("No src_rec file found")
+                return sr
+        else:
+            src_rec_data = fname 
+        alldf = pd.read_csv(
                 fname, sep=r"\s+", header=None, comment="#", low_memory=False
             )
 
@@ -385,89 +398,90 @@ In this case, please set dist_in_data=True and read again."""
         :param fname: Path to the src_rec file, defaults to 'src_rec_file'
         :type fname: str, optional
         """
-        with open(fname, "w") as f:
-            for idx, src in tqdm.tqdm(
-                self.src_points.iterrows(),
-                total=len(self.src_points),
-                desc="Writing src_rec file",
-            ):
-                time_lst = (
-                    src["origin_time"].strftime("%Y_%m_%d_%H_%M_%S.%f").split("_")
-                )
-                f.write(
-                    "{:d} {} {} {} {} {} {} {:.4f} {:.4f} {:.4f} {:.4f} {} {} {:.4f}\n".format(
+        output = StringIO()
+        src_points = self.src_points
+        rec_points = self.rec_points
+        rec_points_cs = self.rec_points_cs
+        rec_points_cr = self.rec_points_cr
+
+        for src in tqdm.tqdm(
+            src_points.itertuples(),
+            total=src_points.shape[0],
+            desc="Writing src_rec file",
+        ):
+            idx = src.Index
+            time_lst = (
+                src.origin_time.strftime("%Y_%m_%d_%H_%M_%S.%f").split("_")
+            )
+            output.write("{:d} {} {} {} {} {} {} {:.4f} {:.4f} {:.4f} {:.4f} {} {} {:.4f}\n".format(
+                    idx,
+                    *time_lst,
+                    src.evla,
+                    src.evlo,
+                    src.evdp,
+                    src.mag,
+                    src.num_rec,
+                    src.event_id,
+                    src.weight,
+                ))
+
+            if self.src_only:
+                continue
+
+            rec_data = rec_points[rec_points["src_index"] == idx]
+            for rec in rec_data.itertuples():
+                output.write("   {:d} {:d} {} {:6.4f} {:6.4f} {:6.4f} {} {:6.4f} {:6.4f}\n".format(
                         idx,
-                        *time_lst,
-                        src["evla"],
-                        src["evlo"],
-                        src["evdp"],
-                        src["mag"],
-                        src["num_rec"],
-                        src["event_id"],
-                        src["weight"],
-                    )
-                )
-                if self.src_only:
-                    continue
-                rec_data = self.rec_points[self.rec_points["src_index"] == idx]
-                for _, rec in rec_data.iterrows():
-                    f.write(
-                        "   {:d} {:d} {} {:6.4f} {:6.4f} {:6.4f} {} {:6.4f} {:6.4f}\n".format(
+                        rec.rec_index,
+                        rec.staname,
+                        rec.stla,
+                        rec.stlo,
+                        rec.stel,
+                        rec.phase,
+                        rec.tt,
+                        rec.weight,
+                    ))
+
+            if not rec_points_cs.empty:
+                rec_data = rec_points_cs[rec_points_cs["src_index"] == idx]
+                for rec in rec_data.itertuples():
+                    output.write("   {:d} {:d} {} {:6.4f} {:6.4f} {:6.4f} {:d} {} {:6.4f} {:6.4f} {:6.4f} {} {:.4f} {:6.4f}\n".format(
                             idx,
-                            rec["rec_index"],
-                            rec["staname"],
-                            rec["stla"],
-                            rec["stlo"],
-                            rec["stel"],
-                            rec["phase"],
-                            rec["tt"],
-                            rec["weight"],
-                        )
-                    )
-                if not self.rec_points_cs.empty:
-                    rec_data = self.rec_points_cs[self.rec_points_cs["src_index"] == idx]
-                    for _, rec in rec_data.iterrows():
-                        f.write(
-                            "   {:d} {:d} {} {:6.4f} {:6.4f} {:6.4f} "
-                            " {:d} {} {:6.4f} {:6.4f} {:6.4f} {} {:.4f} {:6.4f}\n".format(
-                                idx,
-                                rec["rec_index1"],
-                                rec["staname1"],
-                                rec["stla1"],
-                                rec["stlo1"],
-                                rec["stel1"],
-                                rec["rec_index2"],
-                                rec['staname2'],
-                                rec['stla2'],
-                                rec['stlo2'],
-                                rec['stel2'],
-                                rec["phase"],
-                                rec["tt"],
-                                rec["weight"],
-                            )
-                        )
-                if not self.rec_points_cr.empty:
-                    rec_data = self.rec_points_cr[self.rec_points_cr["src_index"] == idx]
-                    for _, rec in rec_data.iterrows():
-                        f.write(
-                            "   {:d} {:d} {} {:6.4f} {:6.4f} {:6.4f} "
-                            " {:d} {} {:6.4f} {:6.4f} {:6.4f} {} {:.4f} {:6.4f}\n".format(
-                                idx,
-                                rec["rec_index"],
-                                rec["staname"],
-                                rec["stla"],
-                                rec["stlo"],
-                                rec["stel"],
-                                rec["src_index2"],
-                                rec['event_id2'],
-                                rec['evla2'],
-                                rec['evlo2'],
-                                rec['evdp2'],
-                                rec["phase"],
-                                rec["tt"],
-                                rec["weight"],
-                            )
-                        )
+                            rec.rec_index1,
+                            rec.staname1,
+                            rec.stla1,
+                            rec.stlo1,
+                            rec.stel1,
+                            rec.rec_index2,
+                            rec.staname2,
+                            rec.stla2,
+                            rec.stlo2,
+                            rec.stel2,
+                            rec.phase,
+                            rec.tt,
+                            rec.weight,
+                        ))
+            if not rec_points_cr.empty:
+                rec_data = rec_points_cr[rec_points_cr["src_index"] == idx]
+                for rec in rec_data.itertuples():
+                    output.write("   {:d} {:d} {} {:6.4f} {:6.4f} {:6.4f} {:d} {} {:6.4f} {:6.4f} {:6.4f} {} {:.4f} {:6.4f}\n".format(
+                            idx,
+                            rec.rec_index,
+                            rec.staname,
+                            rec.stla,
+                            rec.stlo,
+                            rec.stel,
+                            rec.src_index2,
+                            rec.event_id2,
+                            rec.evla2,
+                            rec.evlo2,
+                            rec.evdp2,
+                            rec.phase,
+                            rec.tt,
+                            rec.weight,
+                        ))
+        with open(fname, "w") as f:
+            f.write(output.getvalue())
 
     def copy(self):
         """Return a copy of SrcRec object
@@ -1012,7 +1026,7 @@ In this case, please set dist_in_data=True and read again."""
             sorted_az = np.sort(az)
             az_diffs = np.diff(np.concatenate((sorted_az, [sorted_az[0] + 360])))
             return np.max(az_diffs)
-        max_gap = self.rec_points.groupby('src_index').apply(lambda x: calc_azi_gap(x['az'].values))
+        max_gap = self.rec_points.groupby('src_index')['az'].apply(lambda x: calc_azi_gap(x.values))
         self.src_points = self.src_points[(max_gap < max_azi_gap)]     
         
         self.update()
@@ -1349,12 +1363,12 @@ In this case, please set dist_in_data=True and read again."""
         src_dp = self.src_points["evdp"].values
         src_weights = self.src_points["weight"].values
         results = []
-        for i, rec in tqdm.tqdm(
-                self.receivers.iterrows(),
+        for rec in tqdm.tqdm(
+                self.receivers.itertuples(index=False),
                 total=len(self.receivers),
                 desc="Generating cr"
             ):
-            rec_data = self.rec_points[self.rec_points["staname"] == rec["staname"]]
+            rec_data = self.rec_points[self.rec_points["staname"] == rec.staname]
             if rec_data.shape[0] < 2:
                 continue
             baz_values = rec_data['baz'].values
@@ -1373,10 +1387,10 @@ In this case, please set dist_in_data=True and read again."""
                         data_row = {
                             "src_index": src_indices[i],
                             "rec_index": rec_indices[i],
-                            "staname": rec["staname"],
-                            "stla": rec["stla"],
-                            "stlo": rec["stlo"],
-                            "stel": rec["stel"],
+                            "staname": rec.staname,
+                            "stla": rec.stla,
+                            "stlo": rec.stlo,
+                            "stel": rec.stel,
                             "src_index2": src_index,
                             "event_id2": src_id[src_index],
                             "evla2": src_la[src_index],
@@ -1384,7 +1398,6 @@ In this case, please set dist_in_data=True and read again."""
                             "evdp2": src_dp[src_index],
                             "phase": f"{rec_phases[i]},cr",
                             "tt": tts[i] - tts[j],
-                            # "weight": (src_weights[src_index]+rec_weights[i])/2,
                             "weight": self._cal_dd_weight(src_weights[src_index], rec_weights[i], dd_weight),
                         }
                         results.append(data_row)
@@ -1448,20 +1461,20 @@ In this case, please set dist_in_data=True and read again."""
             )
             # apply weights to rec_points
             self.receivers['weight'] = weights
-            for i, row in self.receivers.iterrows():
-                self.rec_points.loc[self.rec_points['staname'] == row['staname'], 'weight'] = row['weight']
-            
+            for row in self.receivers.itertuples(index=False):
+                self.rec_points.loc[self.rec_points['staname'] == row.staname, 'weight'] = row.weight
+
             if not self.rec_points_cs.empty:
-                for i, row in self.rec_points_cs.iterrows():
-                    w1 = self.receivers.loc[self.receivers['staname'] == row['staname1'], 'weight'].values[0]
-                    w2 = self.receivers.loc[self.receivers['staname'] == row['staname2'], 'weight'].values[0]
-                    self.rec_points_cs.loc[i, 'weight'] = self._cal_dd_weight(w1, w2, dd_weight)
-            
+                for row in self.rec_points_cs.itertuples(index=True):
+                    w1 = self.receivers.loc[self.receivers['staname'] == row.staname1, 'weight'].values[0]
+                    w2 = self.receivers.loc[self.receivers['staname'] == row.staname2, 'weight'].values[0]
+                    self.rec_points_cs.loc[row.Index, 'weight'] = self._cal_dd_weight(w1, w2, dd_weight)
+
             if not self.rec_points_cr.empty:
-                for i, row in self.rec_points_cr.iterrows():
-                    w1 = self.receivers.loc[self.receivers['staname'] == row['staname'], 'weight'].values[0]
-                    w2 = self.src_points.loc[self.src_points['event_id'] == row['event_id2'], 'weight'].values[0]
-                    self.rec_points_cr.loc[i, 'weight'] = self._cal_dd_weight(w1, w2, dd_weight)
+                for row in self.rec_points_cr.itertuples(index=True):
+                    w1 = self.receivers.loc[self.receivers['staname'] == row.staname, 'weight'].values[0]
+                    w2 = self.src_points.loc[self.src_points['event_id'] == row.event_id2, 'weight'].values[0]
+                    self.rec_points_cr.loc[row.Index, 'weight'] = self._cal_dd_weight(w1, w2, dd_weight)
 
     def add_noise(self, range_in_sec=0.1, mean_in_sec=0.0, shape="gaussian"):
         """Add random noise on travel time
@@ -1488,6 +1501,24 @@ In this case, please set dist_in_data=True and read again."""
                     loc=mean_in_sec, scale=range_in_sec, size=rec_type.shape[0]
                 )
             rec_type["tt"] += noise
+
+    def add_noise_to_source(self, lat_pert=0.1, lon_pert=0.1, depth_pert=10, tau_pert=0.5):
+        """Add random noise on source location
+
+        :param lat_pert: Maximum perturbation on latitude in degree, defaults to 0.1
+        :type lat_pert: float, optional
+        :param lon_pert: Maximum perturbation on longitude in degree, defaults to 0.1
+        :type lon_pert: float, optional
+        :param depth_pert: Maximum perturbation on depth in km, defaults to 10
+        :type depth_pert: float, optional
+        :param tau_pert: Maximum perturbation on origin time in sec, defaults to 0.0
+        :type tau_pert: float, optional
+        """
+        self.log.SrcReclog.info("Adding noise on source location...")
+        self.src_points["evla"] += np.random.uniform(-lat_pert, lat_pert, self.src_points.shape[0])
+        self.src_points["evlo"] += np.random.uniform(-lon_pert, lon_pert, self.src_points.shape[0])
+        self.src_points["evdp"] += np.random.uniform(-depth_pert, depth_pert, self.src_points.shape[0])
+        self.src_points["origin_time"] +=  pd.to_timedelta(np.random.uniform(-tau_pert, tau_pert, self.src_points.shape[0]))
 
     def rotate(self, clat:float, clon:float, angle:float, reverse=False):
         """Rotate sources and receivers around a center point

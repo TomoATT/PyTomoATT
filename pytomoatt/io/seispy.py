@@ -2,8 +2,10 @@ import glob
 import pandas as pd
 import numpy as np
 from os.path import join, basename, dirname
-from obspy.io.sac import SACTrace
-
+try:
+    from obspy.io.sac import SACTrace
+except ImportError as e:
+    raise ImportError('ObsPy is required for Seispy I/O \n{}'.format(e))
 
 class Seispy:
     def __init__(self, rf_path:str):
@@ -38,7 +40,7 @@ class Seispy:
         names = ['event_id', 'phase', 'evla', 'evlo', 'evdp',
                   'gcarc', 'baz', 'rayp', 'mag', 'f0']
         for i, fname in enumerate(self.finallist_paths):
-            evts = pd.read_csv(fname, sep='\s+', header=None, names=names)
+            evts = pd.read_csv(fname, sep=r'\s+', header=None, names=names)
             sta_info = self.sta_info[self.sta_info['staname'] == self.stanames[i]]
             sta_info_repeated = pd.concat([sta_info]*evts.shape[0], ignore_index=True)
             evts = pd.concat([evts, sta_info_repeated], axis=1)

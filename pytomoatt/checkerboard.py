@@ -1,21 +1,31 @@
 import h5py
 import numpy as np
 from .utils.common import init_axis, sind, cosd
+from .para import ATTPara
 import copy
 
 
 class Checker():
     """Create checkerboard model by adding perturbations on an exist model
     """
-    def __init__(self, fname:str) -> None:
-        self.model_file = fname
-        with h5py.File(fname) as f:
+    def __init__(self, model_fname:str, para_fname='input_params.yml') -> None:
+        """Initialize Checker object
+        
+        :param fname: Path to initial model file
+        :type fname: str
+        :param para_fname: Path to parameter file, defaults to 'input_params.yml'
+        :type para_fname: str, optional
+        """
+        self.model_file = model_fname
+        self.para_fname = para_fname
+        with h5py.File(model_fname) as f:
             self.vel = f['vel'][:]
             self.eta = f['eta'][:]
             self.xi = f['xi'][:]
             self.zeta = f['zeta'][:]
+        self._init_axis()
 
-    def init_axis(self, min_max_dep, min_max_lat, min_max_lon, n_rtp):
+    def _init_axis(self):
         """Initialize axis
 
         :param min_max_dep: min and max depth, ``[min_dep, max_dep]``
@@ -27,6 +37,11 @@ class Checker():
         :param n_rtp: number of dimensions [ndep, nlat, nlon]
         :type n_rtp: list
         """
+        para = ATTPara(self.para_fname)
+        n_rtp = para.input_params['domain']['n_rtp']
+        min_max_dep = para.input_params['domain']['min_max_dep']
+        min_max_lat = para.input_params['domain']['min_max_lat']
+        min_max_lon = para.input_params['domain']['min_max_lon']
         self.dd, self.tt, self.pp, self.dr, self.dt, self.dp, = init_axis(
             min_max_dep, min_max_lat, min_max_lon, n_rtp
         )
@@ -51,21 +66,23 @@ class Checker():
                      lim_x=None, lim_y=None, lim_z=None):
         """Create checkerboard
 
-        :param period_x: Multiple of period along X, e.g., set to 1 for 2 anomalies
-        :type period_x: float
-        :param period_y: Multiple of period along Y
-        :type period_y: float
-        :param period_z: Multiple of period along Z
-        :type period_z: float
-        :param pert_vel: Perturbation for velocity, defaults to 0.08
+        :param n_pert_x: Multiple of period along X, e.g., set to 1 for 2 anomalies
+        :type n_pert_x: float
+        :param n_pert_y: Multiple of period along Y
+        :type n_pert_y: float
+        :param n_pert_z: Multiple of period along Z
+        :type n_pert_z: float
+        :param pert_vel: Perturbation for velocity, defaults to ``0.08``
         :type pert_vel: float, optional
-        :param pert_ani: Perturbation for anisotropy, defaults to 0.04
+        :param pert_ani: Perturbation for anisotropy, defaults to ``0.04``
         :type pert_ani: float, optional
-        :param lim_x: Left and right bound along X, defaults to None
+        :param ani_dir: Direction of fast velocity direction, defaults to ``45``
+        :type ani_dir: float, optional
+        :param lim_x: Left and right bound along X, defaults to ``None``
         :type lim_x: list, optional
-        :param lim_y: Left and right bound along Y, defaults to None
+        :param lim_y: Left and right bound along Y, defaults to ``None``
         :type lim_y: list, optional
-        :param lim_z: Left and right bound along Z, defaults to None
+        :param lim_z: Left and right bound along Z, defaults to ``None``
         :type lim_z: list, optional
         """
         if lim_x is not None:

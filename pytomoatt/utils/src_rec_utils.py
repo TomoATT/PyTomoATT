@@ -1,3 +1,7 @@
+import urllib3
+import io
+import tqdm
+
 
 def define_rec_cols(dist_in_data, name_net_and_sta):
     if not dist_in_data:
@@ -64,6 +68,7 @@ def define_rec_cols(dist_in_data, name_net_and_sta):
             ]
     return columns, last_col
 
+
 def get_rec_points_types(dist):
     common_type = {
         "src_index": int,
@@ -79,6 +84,7 @@ def get_rec_points_types(dist):
     if dist:
         common_type["dist_deg"] = float
     return common_type
+
 
 def setup_rec_points_dd(type='cs'):
     if type == 'cs':       
@@ -151,6 +157,7 @@ def setup_rec_points_dd(type='cs'):
         raise ValueError('type should be either "cs" or "cr"')
     return columns, data_type
 
+
 def update_position(sr):
     sr.src_points = sr.src_points.merge(
         sr.sources[['event_id', 'evlo', 'evla']],
@@ -213,3 +220,24 @@ def update_position(sr):
         sr.rec_points_cr['evlo2'] = sr.rec_points_cr['evlo']
         sr.rec_points_cr['evla2'] = sr.rec_points_cr['evla']
         sr.rec_points_cr.drop(columns=['evlo', 'evla', 'event_id'], inplace=True)
+
+
+def download_src_rec_file(url):
+    http = urllib3.PoolManager()
+    response = http.request('GET', url, preload_content=False)
+    if response.status == 200:
+        data = io.StringIO()
+        total_size = int(response.headers.get('Content-Length', 0))
+        with tqdm.tqdm(total=total_size, unit='KB', unit_scale=True, desc='Downloading') as pbar:
+            while True:
+                chunk = response.read(1024)
+                if not chunk:
+                    break
+                data.write(chunk.decode('utf-8'))
+                pbar.update(len(chunk))
+        data.seek(0)  
+        response.release_conn()
+        return data
+    else:
+        response.release_conn()
+        return None

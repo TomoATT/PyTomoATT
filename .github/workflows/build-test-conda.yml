@@ -40,12 +40,13 @@ jobs:
         uses: conda-incubator/setup-miniconda@v3
         with:
           python-version: "3.12"
+          channels: conda-forge
       - name: Install dependencies
         run: |
-          conda install numpy scipy h5py pandas xarray hatchling tqdm
+          conda install hatchling 
           python -m pip install --upgrade pip
+          pip install pytest pytest-cov obspy
           pip install .
-          pip install pytest pytest-cov
       - name: test
         run: |
           cd test

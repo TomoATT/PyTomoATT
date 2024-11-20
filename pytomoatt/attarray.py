@@ -26,7 +26,7 @@ class Dataset(xarray.Dataset):
         :param samp_interval: Sampling interval, defaults to 0
         :type samp_interval: int, optional
         :return: xyz data with 3 columns [lon, lat, value]
-        :rtype: numpy.ndarray
+        :rtype: :class:`numpy.ndarray`
         """
         if field not in self.data_vars.keys():
             raise ValueError('Error field name of {}'.format(field))
@@ -74,11 +74,11 @@ class Dataset(xarray.Dataset):
         :param val: interval between successive points in km
         :type val: float
         :return: xyz data with 5 columns [lon, lat, dis, dep, value]
-        :rtype: numpy.ndarray
+        :rtype: :class:`numpy.ndarray`
         """
         # Initialize a profile
         g = Geod(ellps='WGS84')
-        az, _, dist = g.inv(start_point[0],start_point[1],end_point[0],end_point[1])
+        az, _, dist = g.inv(start_point[0],start_point[1],end_point[0],end_point[1], return_back_azimuth=True)
         sec_range = np.arange(0, dist/1000, val)
         r = g.fwd_intermediate(start_point[0],start_point[1], az, npts=sec_range.size, del_s=val*1000)
 

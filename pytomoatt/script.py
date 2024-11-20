@@ -116,14 +116,7 @@ The pta commands include:
         parser.add_argument('-y', help='Upper and low bound for latitude direction', default=None, metavar='ymin/ymax')
         parser.add_argument('-z', help='Upper and low bound for depth direction', default=None, metavar='zmin/zmax')
         args = parser.parse_args(sys.argv[2:])
-        para = ATTPara(args.input_params)
-        cb = Checker(args.i)
-        cb.init_axis(
-            para.input_params['domain']['min_max_dep'],
-            para.input_params['domain']['min_max_lat'],
-            para.input_params['domain']['min_max_lon'],
-            para.input_params['domain']['n_rtp'],
-        )
+        cb = Checker(args.i, para_fname=args.input_params)
         n_period = [float(v) for v in args.n.split('/')]
         pert = [float(v) for v in args.p.split('/')]
         if args.x is not None:
