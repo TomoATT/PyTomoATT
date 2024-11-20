@@ -36,7 +36,7 @@ jobs:
       - name: Setup Mambaforge
         uses: conda-incubator/setup-miniconda@v3
         with:
-          channels: conda-forge,defaults
+          channels: conda-forge
           environment-file: environment.yml
 
       - name: Build docs
