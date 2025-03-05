@@ -642,6 +642,8 @@ In this case, please set dist_in_data=True and read again."""
                     [self.rec_points_cr, sr.rec_points_cr], ignore_index=True
                 )
 
+        self.update_unique_src_rec()
+        self.update()
         # store fnames
         self.fnames.extend(sr.fnames)
 
@@ -665,7 +667,9 @@ In this case, please set dist_in_data=True and read again."""
             ]
           
     def remove_src_by_new_rec(self):
-        """remove src_points by new receivers"""
+        """
+        remove src_points by new receivers
+        """
         self.src_points = self.src_points[
             self.src_points.index.isin(self.rec_points["src_index"])
         ]
@@ -695,7 +699,8 @@ In this case, please set dist_in_data=True and read again."""
 
     def update(self):
         """
-        Update ``SrcRec.src_points`` and ``SrcRec.rec_points`` with procedures:
+        Update ``SrcRec.src_points``, ``SrcRec.rec_points``
+        ``SrcRec.rec_points_cr`` and ``SrcRec.rec_points_cs`` with procedures:
 
         1. remove receivers by new sources
         2. remove sources by new receivers
@@ -899,7 +904,7 @@ In this case, please set dist_in_data=True and read again."""
         """
         Select sources and station in a box region
 
-        :param region: Box region defined as [lon1, lon2, lat1, lat2]
+        :param region: Box region defined as ``[lon1, lon2, lat1, lat2]``
         :type region: iterable
         """
         # select source within this region.
@@ -1039,6 +1044,7 @@ In this case, please set dist_in_data=True and read again."""
 
     def select_by_num_rec(self, num_rec: int):
         """select sources with recievers greater and equal than a number
+
         :param num_rec: threshold of minimum receiver number
         :type num_rec: int
         """

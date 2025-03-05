@@ -85,7 +85,6 @@ class ATTData():
                 if not (key in attdata.fdata[group_name].keys()):
                     raise ValueError('Error dataset_name of {}. \n{} are available.'.format(key, ', '.join(attdata.fgrid.keys())))
                 attdata._add_field(key)
-                print(attdata.vel)
                 attdata.__dict__[key], attdata.grid_glob_r, \
                 attdata.grid_glob_t, attdata.grid_glob_p = \
                 attdata._data_retrieval(group_name=group_name, dataset_name=key)
