@@ -642,6 +642,8 @@ In this case, please set dist_in_data=True and read again."""
                     [self.rec_points_cr, sr.rec_points_cr], ignore_index=True
                 )
 
+        self.update_unique_src_rec()
+        self.update()
         # store fnames
         self.fnames.extend(sr.fnames)
 
