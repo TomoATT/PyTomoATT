@@ -667,7 +667,6 @@ In this case, please set dist_in_data=True and read again."""
                     [self.rec_points_cr, sr.rec_points_cr], ignore_index=True
                 )
 
-        self.update_unique_src_rec()
         self.update()
         # store fnames
         self.fnames.extend(sr.fnames)
@@ -738,6 +737,7 @@ In this case, please set dist_in_data=True and read again."""
         self.remove_src_by_new_rec()
         self.update_num_rec()
         self.reset_index()
+        self.remove_src_by_duplicate_event_id()
         # sort by src_index
         self.src_points.sort_values(by=["src_index"], inplace=True)
         self.rec_points.sort_values(by=["src_index", "rec_index"], inplace=True)
@@ -745,6 +745,19 @@ In this case, please set dist_in_data=True and read again."""
             self.rec_points_cr.sort_values(by=["src_index", "rec_index"], inplace=True)
         if not self.rec_points_cs.empty:
             self.rec_points_cs.sort_values(by=["src_index", "rec_index1"], inplace=True)
+    
+    def remove_src_by_duplicate_event_id(self, keep="first"):
+        """
+        remove ``src_points`` by duplicated ``event_id``
+
+        :param keep: keep first or last duplicated event_id, defaults to "first"
+                     available options are "first" and "last"
+        :type keep: str, optional
+        """
+        self.src_points = self.src_points[
+            ~self.src_points["event_id"].duplicated(keep=keep)
+        ]
+        self.update_num_rec()
 
     def erase_src_with_no_rec(self):
         """
