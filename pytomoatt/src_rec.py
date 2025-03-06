@@ -516,6 +516,7 @@ In this case, please set dist_in_data=True and read again."""
                 "evdp": float,
             }
         )
+        self.sources.index = np.arange(len(self.sources))
 
         # get receivers
         rec_col = ["staname", "stla", "stlo", "stel"]
@@ -544,11 +545,22 @@ In this case, please set dist_in_data=True and read again."""
                 "stel": float,
             }
         )
+        self.receivers.index = np.arange(len(self.receivers))
+
+    def sort(self, by="origin_time"):
+        """Sort sources by given column
+
+        :param by: Column to sort by, defaults to 'origin_time'
+        :type by: str, optional
+        """
+        self.src_points.sort_values(by=by, inplace=True)
+        self.update()
 
     def reset_index(self):
         """Reset index of source and receivers."""
         # self.src_points.index = np.arange(len(self.src_points))
         # use index in self.sources when self.src_points['event_id'] == self.sources['event_id']
+        self.sources.index = np.arange(len(self.sources))
         new_index = self.src_points["event_id"].map(
             dict(zip(self.sources["event_id"], self.sources.index))
         )
