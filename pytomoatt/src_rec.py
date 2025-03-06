@@ -15,7 +15,8 @@ pd.options.mode.chained_assignment = None  # default='warn'
 
 
 class SrcRec:
-    """I/O for source <--> receiver file
+    """
+    I/O for source <--> receiver file
 
     :param fname: Path to src_rec file
     :type fname: str
@@ -45,7 +46,8 @@ class SrcRec:
 
     @property
     def src_points(self):
-        """Return a DataFrame of all sources
+        """
+        Return a DataFrame of all sources
 
         :return: All sources
         :rtype: pandas.DataFrame
@@ -92,7 +94,8 @@ class SrcRec:
 
     @property
     def rec_points(self):
-        """Return a DataFrame of all receivers
+        """
+        Return a DataFrame of all receivers
 
         :return: All receivers
         :rtype: pandas.DataFrame
@@ -138,7 +141,8 @@ class SrcRec:
 
     @property
     def rec_points_cs(self):
-        """Return a DataFrame of all common sources
+        """
+        Return a DataFrame of all common sources
 
         :return: All common sources
         :rtype: pandas.DataFrame
@@ -175,7 +179,8 @@ class SrcRec:
 
     @property
     def rec_points_cr(self):
-        """Return a DataFrame of all common receivers
+        """
+        Return a DataFrame of all common receivers
 
         :return: All common receivers
         :rtype: pandas.DataFrame
@@ -212,7 +217,8 @@ class SrcRec:
 
     @classmethod
     def read(cls, fname: str, dist_in_data=False, name_net_and_sta=False, **kwargs):
-        """Read source <--> receiver file to pandas.DataFrame
+        """
+        Read source <--> receiver file to pandas.DataFrame
 
         :param fname: Path to src_rec file
         :type fname: str
@@ -393,7 +399,8 @@ In this case, please set dist_in_data=True and read again."""
         return sr
 
     def write(self, fname="src_rec_file"):
-        """Write sources and receivers to ASCII file for TomoATT
+        """
+        Write sources and receivers to ASCII file for TomoATT
 
         :param fname: Path to the src_rec file, defaults to 'src_rec_file'
         :type fname: str, optional
@@ -484,7 +491,8 @@ In this case, please set dist_in_data=True and read again."""
             f.write(output.getvalue())
 
     def copy(self):
-        """Return a copy of SrcRec object
+        """
+        Return a copy of SrcRec object
 
         :return: Copy of SrcRec object
         :rtype: SrcRec
@@ -548,16 +556,21 @@ In this case, please set dist_in_data=True and read again."""
         self.receivers.index = np.arange(len(self.receivers))
 
     def sort(self, by="origin_time"):
-        """Sort sources by given column
+        """
+        Sort sources by given column
 
-        :param by: Column to sort by, defaults to 'origin_time'
+        :param by: Column to sort by, defaults to ``origin_time``
+                   available columns are ``origin_time``, ``evla``, ``evlo``, ``evdp``,
+                   ``mag``, ``num_rec``, ``event_id``, ``weight``
         :type by: str, optional
         """
         self.src_points.sort_values(by=by, inplace=True)
         self.update()
 
     def reset_index(self):
-        """Reset index of source and receivers."""
+        """
+        Reset index of source and receivers.
+        """
         # self.src_points.index = np.arange(len(self.src_points))
         # use index in self.sources when self.src_points['event_id'] == self.sources['event_id']
         self.sources.index = np.arange(len(self.sources))
@@ -661,7 +674,7 @@ In this case, please set dist_in_data=True and read again."""
 
     def remove_rec_by_new_src(self,):
         """
-        remove rec_points by new src_points
+        remove ``rec_points`` by new ``src_points``
         """
         self.rec_points = self.rec_points[
             self.rec_points["src_index"].isin(self.src_points.index)
@@ -680,7 +693,7 @@ In this case, please set dist_in_data=True and read again."""
           
     def remove_src_by_new_rec(self):
         """
-        remove src_points by new receivers
+        remove ``src_points`` by new receivers
         """
         self.src_points = self.src_points[
             self.src_points.index.isin(self.rec_points["src_index"])
@@ -699,7 +712,7 @@ In this case, please set dist_in_data=True and read again."""
 
     def update_num_rec(self):
         """
-        update num_rec in src_points by current rec_points
+        update num_rec in ``src_points`` by current ``rec_points``
         """
         self.src_points["num_rec"] = self.rec_points.groupby("src_index").size()
         if not self.rec_points_cr.empty:
@@ -711,7 +724,7 @@ In this case, please set dist_in_data=True and read again."""
 
     def update(self):
         """
-        Update ``SrcRec.src_points``, ``SrcRec.rec_points``
+        Update ``SrcRec.src_points``, ``SrcRec.rec_points``,
         ``SrcRec.rec_points_cr`` and ``SrcRec.rec_points_cs`` with procedures:
 
         1. remove receivers by new sources
@@ -735,7 +748,7 @@ In this case, please set dist_in_data=True and read again."""
 
     def erase_src_with_no_rec(self):
         """
-        erase src_points with no rec_points
+        erase ``src_points`` with no ``rec_points``
         """
         self.log.SrcReclog.info("src_points before removing: ", self.src_points.shape)
         self.src_points = self.src_points[self.src_points["num_rec"] > 0]
@@ -1150,7 +1163,7 @@ In this case, please set dist_in_data=True and read again."""
 
         :param d_deg: grid size along lat and lon in degree
         :type d_deg: float
-        :param d_km: grid size along depth axis in km, (only used when obj='src' or 'both')
+        :param d_km: grid size along depth axis in km, (only used when obj=``src`` or ``both``)
         :type d_km: float
         :param obj: Object to be weighted, options: ``src``, ``rec`` or ``both``, defaults to ``both``
         :type obj: str, optional
@@ -1299,7 +1312,7 @@ In this case, please set dist_in_data=True and read again."""
         :param max_dist_gap: Maximum distance gap for selecting events, defaults to 2.5
         :type max_dist_gap: float, optional
         :param dd_weight: Weighting method for double difference, options: ``average``, ``multiply``, defaults to ``average``
-        :param recalc_baz: Recalculate azimuth and back azimuth, defaults to False
+        :param recalc_baz: Recalculate azimuth and back azimuth, defaults to ``False``
         :type recalc_baz: bool, optional
 
         ``self.rec_points_cr`` or ``self.rec_points_cs`` are generated
