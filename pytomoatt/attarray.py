@@ -84,11 +84,11 @@ class Dataset(xarray.Dataset):
             sec_points, sec_range = interpolation_lola_linear(start_point, end_point, val)
         else:
             g = Geod(ellps='WGS84')
-            az, _, dist = g.inv(start_point[0],start_point[1],end_point[0],end_point[1], return_back_azimuth=True)
+            az, _, dist = g.inv(start_point[0],start_point[1],end_point[0],end_point[1], return_back_azimuth=False)
             sec_range = np.arange(0, dist/1000, val)
             r = g.fwd_intermediate(start_point[0],start_point[1], az, npts=sec_range.size, del_s=val*1000)
             sec_points = np.array([r.lons, r.lats]).T
-
+        print (sec_range)
         # create points array
         points = np.zeros([sec_range.size*self.coords['dep'].size, 5])
         offset = 0
