@@ -207,4 +207,6 @@ def interpolation_lola_linear(start_point, end_point, step_distance):
 
     points = np.array(points)
 
-    return points
+    sec_range = DistAZ(start_point[1], start_point[0], points[:, 1], points[:, 0]).degreesToKilometers()
+
+    return points, sec_range

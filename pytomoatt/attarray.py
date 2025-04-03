@@ -81,7 +81,7 @@ class Dataset(xarray.Dataset):
         """
         # Initialize a profile
         if flat_earth:
-            sec_points = interpolation_lola_linear(start_point, end_point, val)
+            sec_points, sec_range = interpolation_lola_linear(start_point, end_point, val)
         else:
             g = Geod(ellps='WGS84')
             az, _, dist = g.inv(start_point[0],start_point[1],end_point[0],end_point[1], return_back_azimuth=True)
