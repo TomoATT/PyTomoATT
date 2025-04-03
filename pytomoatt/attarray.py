@@ -88,7 +88,7 @@ class Dataset(xarray.Dataset):
             sec_range = np.arange(0, dist/1000, val)
             r = g.fwd_intermediate(start_point[0],start_point[1], az, npts=sec_range.size, del_s=val*1000)
             sec_points = np.array([r.lons, r.lats]).T
-        print (sec_range)
+
         # create points array
         points = np.zeros([sec_range.size*self.coords['dep'].size, 5])
         offset = 0
