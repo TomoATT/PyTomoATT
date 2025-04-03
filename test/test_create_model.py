@@ -42,3 +42,6 @@ class TestATTModel():
         dataset.interp_sec(
             start_point=[mod.min_max_lon[0], mod.min_max_lat[1]],
             end_point=[mod.min_max_lon[1], mod.min_max_lat[1]], field='vel')
+        dataset.interp_sec(
+            start_point=[mod.min_max_lon[0], mod.min_max_lat[1]],
+            end_point=[mod.min_max_lon[1], mod.min_max_lat[1]], field='vel', flat_earth=True)
