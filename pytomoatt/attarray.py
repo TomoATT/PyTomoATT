@@ -2,7 +2,7 @@ import xarray
 import numpy as np
 from scipy.interpolate import interpn
 from pyproj import Geod
-from utils.common import interpolation_lola_linear
+from .utils.common import interpolation_lola_linear
 
 class Dataset(xarray.Dataset):
     """Sub class of `xarray.Dataset <https://docs.xarray.dev/en/stable/generated/xarray.Dataset.html>`__
