@@ -74,6 +74,8 @@ class Dataset(xarray.Dataset):
         :type field: str
         :param val: interval between successive points in km
         :type val: float
+        :param flat_earth: whether to use flat earth model, defaults to False
+        :type flat_earth: bool, optional
         :return: xyz data with 5 columns [lon, lat, dis, dep, value]
         :rtype: :class:`numpy.ndarray`
         """
