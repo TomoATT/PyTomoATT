@@ -121,7 +121,8 @@ class DistAZ:
         rhs2 = (aa - g) * (aa - g) + (bb - h) * (bb - h) + (cc - k) * (cc - k) - 2.
         dbaz = np.arctan2(rhs1, rhs2)
 
-        dbaz_idx = np.where(dbaz < 0.0)[0]
+        # dbaz_idx = np.where(dbaz < 0.0)[0]
+        dbaz_idx = np.atleast_1d(dbaz < 0.0).nonzero()[0]
         if len(dbaz_idx) != 0:
             if isinstance(dbaz, (int, float)):
                 dbaz += 2 * np.pi
