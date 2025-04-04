@@ -185,8 +185,10 @@ class DistAZ:
             else:
                 self.az[idx] = 0.0
         
-        la_idx = np.where(lat1 == lat2)[0]
-        lo_idx = np.where(lon1 == lon2)[0]
+        # la_idx = np.where(lat1 == lat2)[0]
+        # lo_idx = np.where(lon1 == lon2)[0]
+        la_idx = np.atleast_1d(lat1 == lat2).nonzero()[0]
+        lo_idx = np.atleast_1d(lon1 == lon2).nonzero()[0]
         idx = np.intersect1d(la_idx, lo_idx)
         if len(idx) != 0:
             if isinstance(self.delta, float):
