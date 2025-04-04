@@ -155,26 +155,30 @@ class DistAZ:
 	c   Make sure 0.0 is always 0.0, not 360.
 	c
 	"""
-        idx = np.where(np.abs(self.baz - 360.) < .00001)[0]
+        # idx = np.where(np.abs(self.baz - 360.) < .00001)[0]
+        idx = np.atleast_1d(np.abs(self.baz - 360.) < .00001).nonzero()[0]
         if len(idx) != 0:
             if isinstance(self.baz, float):
                 self.baz = 0.0
             else:
                 self.baz[idx] = 0.0
-        idx = np.where(np.abs(self.baz) < .00001)[0]
+        # idx = np.where(np.abs(self.baz) < .00001)[0]
+        idx = np.atleast_1d(np.abs(self.baz) < .00001).nonzero()[0]
         if len(idx) != 0:
             if isinstance(self.baz, float):
                 self.baz = 0.0
             else:
                 self.baz[idx] = 0.0
 
-        idx = np.where(np.abs(self.az - 360.) < .00001)[0]
+        # idx = np.where(np.abs(self.az - 360.) < .00001)[0]
+        idx = np.atleast_1d(np.abs(self.az - 360.) < .00001).nonzero()[0]
         if len(idx) != 0:
             if isinstance(self.az, float):
                 self.az = 0.0
             else:
                 self.az[idx] = 0.0
-        idx = np.where(np.abs(self.az) < .00001)[0]
+        # idx = np.where(np.abs(self.az) < .00001)[0]
+        idx = np.atleast_1d(np.abs(self.az) < .00001).nonzero()[0]
         if len(idx) != 0:
             if isinstance(self.az, float):
                 self.az = 0.0
