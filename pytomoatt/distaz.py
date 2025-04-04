@@ -140,7 +140,8 @@ class DistAZ:
         rhs2 = (a - gg) * (a - gg) + (b - hh) * (b - hh) + (c - kk) * (c - kk) - 2.
         daz = np.arctan2(rhs1, rhs2)
 
-        daz_idx = np.where(daz < 0.0)[0]
+        # daz_idx = np.where(daz < 0.0)[0]
+        daz_idx = np.atleast_1d(dbaz < 0.0).nonzero()[0]
         if len(daz_idx) != 0:
             if isinstance(daz, (int, float)):
                 daz += 2 * np.pi
