@@ -143,6 +143,7 @@ def ignore_nan_3d(data):
     result = interpolated.reshape(data.shape)
     return result
 
+
 def str2val(str_val):
     # single value handling
     # return integer
@@ -171,3 +172,36 @@ def str2val(str_val):
         pass
 
     return str_val
+
+
+def interpolation_lola_linear(start_point, end_point, step_distance):
+    """
+    Interpolate points along a great circle path between two geographic coordinates.
+    :param start_point: Start point with (lon, lat)
+    :type start_point: tuple
+    :param end_point: End point with (lon, lat)
+    :type end_point: tuple
+    :param step_distance: Distance between points in km
+    :type step_distance: float
+    :return: Array of points with (lon, lat)
+    """
+    from ..distaz import DistAZ
+    total_distance = DistAZ(start_point[1], start_point[0], end_point[1], end_point[0]).degreesToKilometers()
+
+    num_steps = int(total_distance // step_distance)
+    fraction = step_distance / total_distance if total_distance != 0 else 0
+
+    points = [start_point]
+    lat_step = (end_point[1] - start_point[1]) / (total_distance / step_distance)
+    lon_step = (end_point[0] - start_point[0]) / (total_distance / step_distance)
+
+    for i in range(1, num_steps + 1):
+        new_lat = start_point[1] + lat_step * i
+        new_lon = start_point[0] + lon_step * i
+        points.append((new_lon, new_lat))
+
+    points = np.array(points)
+
+    sec_range = DistAZ(start_point[1], start_point[0], points[:, 1], points[:, 0]).degreesToKilometers()
+
+    return points, sec_range

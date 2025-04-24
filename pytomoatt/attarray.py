@@ -2,6 +2,7 @@ import xarray
 import numpy as np
 from scipy.interpolate import interpn
 from pyproj import Geod
+from .utils.common import interpolation_lola_linear
 
 class Dataset(xarray.Dataset):
     """Sub class of `xarray.Dataset <https://docs.xarray.dev/en/stable/generated/xarray.Dataset.html>`__
@@ -62,7 +63,7 @@ class Dataset(xarray.Dataset):
             data = points[:, [2, 1, 3]]
         return data
     
-    def interp_sec(self, start_point, end_point, field:str, val=10.):
+    def interp_sec(self, start_point, end_point, field:str, val=10., flat_earth=False):
         """Interpolate value along a cross section
 
         :param start_point: start point with [lon1, lat1]
@@ -73,19 +74,25 @@ class Dataset(xarray.Dataset):
         :type field: str
         :param val: interval between successive points in km
         :type val: float
+        :param flat_earth: whether to use flat earth model, defaults to False
+        :type flat_earth: bool, optional
         :return: xyz data with 5 columns [lon, lat, dis, dep, value]
         :rtype: :class:`numpy.ndarray`
         """
         # Initialize a profile
-        g = Geod(ellps='WGS84')
-        az, _, dist = g.inv(start_point[0],start_point[1],end_point[0],end_point[1], return_back_azimuth=True)
-        sec_range = np.arange(0, dist/1000, val)
-        r = g.fwd_intermediate(start_point[0],start_point[1], az, npts=sec_range.size, del_s=val*1000)
+        if flat_earth:
+            sec_points, sec_range = interpolation_lola_linear(start_point, end_point, val)
+        else:
+            g = Geod(ellps='WGS84')
+            az, _, dist = g.inv(start_point[0],start_point[1],end_point[0],end_point[1], return_back_azimuth=False)
+            sec_range = np.arange(0, dist/1000, val)
+            r = g.fwd_intermediate(start_point[0],start_point[1], az, npts=sec_range.size, del_s=val*1000)
+            sec_points = np.array([r.lons, r.lats]).T
 
         # create points array
         points = np.zeros([sec_range.size*self.coords['dep'].size, 5])
         offset = 0
-        for i, lola in enumerate(zip(r.lons, r.lats)):
+        for i, lola in enumerate(sec_points):
             for _, rad in enumerate(self.coords['rad'].values):
                 points[offset] = [rad, lola[1], lola[0], sec_range[i], 0.]
                 offset += 1

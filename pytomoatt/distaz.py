@@ -121,7 +121,8 @@ class DistAZ:
         rhs2 = (aa - g) * (aa - g) + (bb - h) * (bb - h) + (cc - k) * (cc - k) - 2.
         dbaz = np.arctan2(rhs1, rhs2)
 
-        dbaz_idx = np.where(dbaz < 0.0)[0]
+        # dbaz_idx = np.where(dbaz < 0.0)[0]
+        dbaz_idx = np.atleast_1d(dbaz < 0.0).nonzero()[0]
         if len(dbaz_idx) != 0:
             if isinstance(dbaz, (int, float)):
                 dbaz += 2 * np.pi
@@ -140,7 +141,8 @@ class DistAZ:
         rhs2 = (a - gg) * (a - gg) + (b - hh) * (b - hh) + (c - kk) * (c - kk) - 2.
         daz = np.arctan2(rhs1, rhs2)
 
-        daz_idx = np.where(daz < 0.0)[0]
+        # daz_idx = np.where(daz < 0.0)[0]
+        daz_idx = np.atleast_1d(dbaz < 0.0).nonzero()[0]
         if len(daz_idx) != 0:
             if isinstance(daz, (int, float)):
                 daz += 2 * np.pi
@@ -153,34 +155,40 @@ class DistAZ:
 	c   Make sure 0.0 is always 0.0, not 360.
 	c
 	"""
-        idx = np.where(np.abs(self.baz - 360.) < .00001)[0]
+        # idx = np.where(np.abs(self.baz - 360.) < .00001)[0]
+        idx = np.atleast_1d(np.abs(self.baz - 360.) < .00001).nonzero()[0]
         if len(idx) != 0:
             if isinstance(self.baz, float):
                 self.baz = 0.0
             else:
                 self.baz[idx] = 0.0
-        idx = np.where(np.abs(self.baz) < .00001)[0]
+        # idx = np.where(np.abs(self.baz) < .00001)[0]
+        idx = np.atleast_1d(np.abs(self.baz) < .00001).nonzero()[0]
         if len(idx) != 0:
             if isinstance(self.baz, float):
                 self.baz = 0.0
             else:
                 self.baz[idx] = 0.0
 
-        idx = np.where(np.abs(self.az - 360.) < .00001)[0]
+        # idx = np.where(np.abs(self.az - 360.) < .00001)[0]
+        idx = np.atleast_1d(np.abs(self.az - 360.) < .00001).nonzero()[0]
         if len(idx) != 0:
             if isinstance(self.az, float):
                 self.az = 0.0
             else:
                 self.az[idx] = 0.0
-        idx = np.where(np.abs(self.az) < .00001)[0]
+        # idx = np.where(np.abs(self.az) < .00001)[0]
+        idx = np.atleast_1d(np.abs(self.az) < .00001).nonzero()[0]
         if len(idx) != 0:
             if isinstance(self.az, float):
                 self.az = 0.0
             else:
                 self.az[idx] = 0.0
         
-        la_idx = np.where(lat1 == lat2)[0]
-        lo_idx = np.where(lon1 == lon2)[0]
+        # la_idx = np.where(lat1 == lat2)[0]
+        # lo_idx = np.where(lon1 == lon2)[0]
+        la_idx = np.atleast_1d(lat1 == lat2).nonzero()[0]
+        lo_idx = np.atleast_1d(lon1 == lon2).nonzero()[0]
         idx = np.intersect1d(la_idx, lo_idx)
         if len(idx) != 0:
             if isinstance(self.delta, float):
