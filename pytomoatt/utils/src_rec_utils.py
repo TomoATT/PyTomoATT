@@ -1,4 +1,3 @@
-import urllib3
 import io
 import tqdm
 
@@ -223,6 +222,10 @@ def update_position(sr):
 
 
 def download_src_rec_file(url):
+    try:
+        import urllib3
+    except:
+        raise ModuleNotFoundError('Please install urllib3 first')
     http = urllib3.PoolManager()
     response = http.request('GET', url, preload_content=False)
     if response.status == 200:
