@@ -224,7 +224,7 @@ def update_position(sr):
 def download_src_rec_file(url):
     try:
         import urllib3
-    except:
+    except ImportError:
         raise ModuleNotFoundError('Please install urllib3 first')
     http = urllib3.PoolManager()
     response = http.request('GET', url, preload_content=False)
