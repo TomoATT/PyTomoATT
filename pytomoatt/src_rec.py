@@ -4,8 +4,7 @@ import pandas as pd
 from .distaz import DistAZ
 from .setuplog import SetupLog
 from .utils.src_rec_utils import define_rec_cols, setup_rec_points_dd, \
-                                 get_rec_points_types, update_position, \
-                                 download_src_rec_file
+                                 get_rec_points_types, update_position
 from sklearn.metrics.pairwise import haversine_distances
 import copy
 from io import StringIO
@@ -232,14 +231,19 @@ class SrcRec:
         sr = cls(fname=fname, **kwargs)
         if not os.path.exists(fname):
             sr.log.SrcReclog.info("Downloading src_rec file from {}".format(fname))
+            try:
+                from .utils.src_rec_utils import download_src_rec_file
+            except ModuleNotFoundError:
+                sr.log.SrcReclog.error("Please install urllib3 first")
+                return sr
             src_rec_data = download_src_rec_file(fname)
             if src_rec_data is None:
-                sr.log.SrcReclog.error("No src_rec file found")
+                sr.log.SrcReclog.error("Failed to download src_rec file from {}".format(fname))
                 return sr
         else:
             src_rec_data = fname 
         alldf = pd.read_csv(
-                fname, sep=r"\s+", header=None, comment="#", low_memory=False
+                src_rec_data, sep=r"\s+", header=None, comment="#", low_memory=False, dtype={12: str}
             )
 
         last_col_src = 12
@@ -613,6 +617,10 @@ In this case, please set dist_in_data=True and read again."""
     def append(self, sr):
         """
         Append another SrcRec object to the current one
+        
+        For sources with the same event_id, keep the first one.
+        For receivers (rec_points, rec_points_cs, rec_points_cr), merge all data
+        under the same event_id and recalculate receiver counts.
 
         :param sr: Another SrcRec object
         :type sr: SrcRec
@@ -628,48 +636,99 @@ In this case, please set dist_in_data=True and read again."""
         
         self.log.SrcReclog.info(f"src_points before appending: {self.src_points.shape[0]}")
         self.log.SrcReclog.info(f"rec_points before appending: {self._count_records()}")
-        # number of sources to be added
-        n_src_offset = self.src_points.shape[0]
 
         # add column for source file tag if not included
         if "fname" not in self.src_points.columns:
             self.src_points["fname"] = self.fnames[0]
-            self.rec_points["fname"] = self.fnames[0]
+            if not self.src_only:
+                self.rec_points["fname"] = self.fnames[0]
+                if not self.rec_points_cs.empty:
+                    self.rec_points_cs["fname"] = self.fnames[0]
+                if not self.rec_points_cr.empty:
+                    self.rec_points_cr["fname"] = self.fnames[0]
         if "fname" not in sr.src_points.columns:
             sr.src_points["fname"] = sr.fnames[0]
-            sr.rec_points["fname"] = sr.fnames[0]
+            if not sr.src_only:
+                sr.rec_points["fname"] = sr.fnames[0]
+                if not sr.rec_points_cs.empty:
+                    sr.rec_points_cs["fname"] = sr.fnames[0]
+                if not sr.rec_points_cr.empty:
+                    sr.rec_points_cr["fname"] = sr.fnames[0]
 
-        # append src_points
-        self.src_points = pd.concat([self.src_points, sr.src_points], ignore_index=True)
-        self.src_points.index.name = "src_index"
-        # self.src_points.index += 1  # start from 1
-
+        # Create a mapping from sr's event_id to self's src_index
+        # For events that exist in both, use self's src_index
+        # For new events in sr, they will get new src_index
+        event_id_mapping = {}
+        
+        # Find common event_ids
+        common_event_ids = set(self.src_points['event_id']) & set(sr.src_points['event_id'])
+        
+        if common_event_ids:
+            self.log.SrcReclog.info(f"Found {len(common_event_ids)} common event_id(s), keeping the first occurrence")
+        
+        # Build mapping for existing events in self
+        for idx, event_id in zip(self.src_points.index, self.src_points['event_id']):
+            event_id_mapping[event_id] = idx
+        
+        # Separate sr's sources into common and new
+        sr_common_mask = sr.src_points['event_id'].isin(common_event_ids)
+        sr_new_sources = sr.src_points[~sr_common_mask].copy()
+        
+        # Append only new sources
+        if not sr_new_sources.empty:
+            n_src_offset = self.src_points.shape[0]
+            self.src_points = pd.concat([self.src_points, sr_new_sources], ignore_index=True)
+            self.src_points.index.name = "src_index"
+            
+            # Add new events to mapping
+            for new_idx, event_id in enumerate(sr_new_sources['event_id']):
+                event_id_mapping[event_id] = n_src_offset + new_idx
+        
         if not self.src_only:
-            # update src_index in rec_points
-            sr.rec_points["src_index"] += n_src_offset
-            # append rec_points
-            self.rec_points = pd.concat(
-                [self.rec_points, sr.rec_points], ignore_index=True
+            # Process rec_points
+            # Map sr's rec_points to correct src_index based on event_id
+            sr_rec_mapped = sr.rec_points.copy()
+            sr_rec_mapped['src_index'] = sr_rec_mapped['src_index'].map(
+                lambda x: event_id_mapping[sr.src_points.loc[x, 'event_id']]
             )
-
-            # append rec_points_cs
+            self.rec_points = pd.concat(
+                [self.rec_points, sr_rec_mapped], ignore_index=True
+            )
+            
+            # Process rec_points_cs
             if not sr.rec_points_cs.empty:
-                sr.rec_points_cs["src_index"] += n_src_offset
+                sr_cs_mapped = sr.rec_points_cs.copy()
+                sr_cs_mapped['src_index'] = sr_cs_mapped['src_index'].map(
+                    lambda x: event_id_mapping[sr.src_points.loc[x, 'event_id']]
+                )
                 self.rec_points_cs = pd.concat(
-                    [self.rec_points_cs, sr.rec_points_cs], ignore_index=True
+                    [self.rec_points_cs, sr_cs_mapped], ignore_index=True
                 )
             
-            # append rec_points_cr
+            # Process rec_points_cr
             if not sr.rec_points_cr.empty:
-                sr.rec_points_cr["src_index"] += n_src_offset
-                sr.rec_points_cr["src_index2"] += n_src_offset
-                self.rec_points_cr = pd.concat(
-                    [self.rec_points_cr, sr.rec_points_cr], ignore_index=True
+                sr_cr_mapped = sr.rec_points_cr.copy()
+                # Map both src_index and src_index2 based on event_id
+                sr_cr_mapped['src_index'] = sr_cr_mapped['src_index'].map(
+                    lambda x: event_id_mapping[sr.src_points.loc[x, 'event_id']]
                 )
+                sr_cr_mapped['src_index2'] = sr_cr_mapped['event_id2'].map(
+                    lambda eid: event_id_mapping.get(eid, -1)
+                )
+                # Remove rows where src_index2 is -1 (event_id2 not found)
+                sr_cr_mapped = sr_cr_mapped[sr_cr_mapped['src_index2'] != -1]
+                
+                if not sr_cr_mapped.empty:
+                    self.rec_points_cr = pd.concat(
+                        [self.rec_points_cr, sr_cr_mapped], ignore_index=True
+                    )
 
         self.update()
         # store fnames
         self.fnames.extend(sr.fnames)
+        
+        self.log.SrcReclog.info(f"src_points after appending: {self.src_points.shape[0]}")
+        self.log.SrcReclog.info(f"rec_points after appending: {self._count_records()}")
 
     def remove_rec_by_new_src(self,):
         """
