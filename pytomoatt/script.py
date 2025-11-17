@@ -105,7 +105,7 @@ The pta commands include:
         parser = argparse.ArgumentParser(description='Add perturbations on a model')
         parser.add_argument('input_params', help='The parameter file of TomoATT, The section \"domain\" will be read.')
         parser.add_argument('-a', help='nx, ny, nz, and FVD of anisotropic anomalies along longitude, '
-                                        'latitude and depth, and fast-velocity-direction, defaults to None'
+                                        'latitude and depth, and fast-velocity-direction, defaults to None.'
                                         'The fvd is an optional parameter, if not provided, it will be set to 45 degrees.', 
                             metavar='nx/ny/nz[/fvd]', default=None)
         parser.add_argument('-i', help='Path to input model file', required=True, metavar='fname')
