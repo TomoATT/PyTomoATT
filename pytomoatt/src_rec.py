@@ -243,7 +243,7 @@ class SrcRec:
         else:
             src_rec_data = fname 
         alldf = pd.read_csv(
-                fname, sep=r"\s+", header=None, comment="#", low_memory=False, dtype={12: str}
+                src_rec_data, sep=r"\s+", header=None, comment="#", low_memory=False, dtype={12: str}
             )
 
         last_col_src = 12
