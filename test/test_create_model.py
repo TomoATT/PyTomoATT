@@ -34,7 +34,7 @@ class TestATTModel():
             lim_y=[-0.5, 0.5],
             lim_z=[10, 120]
         )
-        mod = cm.to_model()
+        mod = cm.to_attmodel()
         mod.to_ani()
 
     def test_read_model(self):
