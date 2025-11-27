@@ -45,7 +45,7 @@ jobs:
         run: |
           conda install hatchling 
           python -m pip install --upgrade pip
-          pip install pytest pytest-cov obspy
+          pip install pytest pytest-cov obspy pyvista
           pip install .
       - name: test
         run: |

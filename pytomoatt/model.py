@@ -5,7 +5,7 @@ from .para import ATTPara
 from .io.crustmodel import CrustModel
 from .io.asciimodel import ASCIIModel
 from .attarray import Dataset
-from .utils.common import init_axis
+from .utils.common import init_axis, km2deg
 import copy
 
 
@@ -73,14 +73,7 @@ class ATTModel():
         """Convert to anisotropic strength (epsilon) and azimuth (phi)
         """
         self.epsilon = np.sqrt(self.eta**2+self.xi**2)
-        # self.phi = np.zeros_like(self.epsilon)
         self.phi = np.rad2deg(0.5*np.arctan2(self.eta, self.xi))
-        # idx = np.where(self.xi <= 0)
-        # self.phi[idx] = 90 + 0.5*atand(self.eta[idx]/self.xi[idx])
-        # idx = np.where((self.xi > 0) & (self.eta <= 0))
-        # self.phi[idx] = 180 + 0.5*atand(self.eta[idx]/self.xi[idx])
-        # idx = np.where((self.xi > 0) & (self.eta > 0))
-        # self.phi[idx] = 0.5*atand(self.eta[idx]/self.xi[idx])
 
     def to_xarray(self):
         """Convert to xarray
@@ -140,18 +133,61 @@ class ATTModel():
             self.n_rtp,
         )
 
-    def smooth(self, sigma=5.0):
+    def smooth(self, sigma=5.0, unit_deg=False, smooth_ani=False, **kwargs):
         """Gaussian smooth the 3D velocity model
 
-        :param sigma: Standard division of gaussian kernel in km, defaults to 10
-        :type sigma: scalar or sequence of scalars , optional
+        :param sigma: Standard deviation for Gaussian kernel.
+                      If scalar, apply to all dimensions.
+                      If sequence of 3, apply to [depth, lat, lon].
+                      Depth is always in km.
+                      Horizontal dimensions depend on unit_deg.
+        :type sigma: scalar or sequence of scalars
+        :param unit_deg: If True, horizontal sigma is in degrees. 
+                         If False, horizontal sigma is in km.
+                         Defaults to False.
+        :type unit_deg: bool
+        :param smooth_ani: If True, also smooth anisotropic parameters (xi, eta, zeta).
+                           Defaults to False.
+        :type smooth_ani: bool
+        :param kwargs: Additional arguments passed to scipy.ndimage.gaussian_filter
+
+        Example
+        -------------------
+        To smooth with 5 km in depth and 0.2 degrees in horizontal directions:
+        >>> model.smooth(sigma=[5.0, 0.2, 0.2], unit_deg=True)
+
+        To smooth with 5 km in depth and 20 km in horizontal directions:
+        >>> model.smooth(sigma=[5.0, 20.0, 20.0], unit_deg=False)
         """
-        if isinstance(sigma, (int, float)):
-            sigma_all = np.ones(3)*sigma/self.d_rtp/2/np.pi
-        elif len(sigma) == 3:
-            sigma_all = np.array(sigma)/self.d_rtp/2/np.pi
-        sigma_all[0:2] /= 111.19
-        self.vel = gaussian_filter(self.vel, sigma)
+        if np.isscalar(sigma):
+            sigma = [sigma, sigma, sigma]
+        elif len(sigma) != 3:
+            raise ValueError('sigma should be a scalar or a sequence of three scalars')
+        
+        sigma = np.array(sigma, dtype=float)
+        sigma_pixel = np.zeros(3)
+
+        # Depth direction (always km)
+        sigma_pixel[0] = sigma[0] / self.d_rtp[0]
+
+        if unit_deg:
+            # Horizontal sigma is in degrees
+            sigma_pixel[1] = sigma[1] / self.d_rtp[1]
+            sigma_pixel[2] = sigma[2] / self.d_rtp[2]
+        else:
+            # Horizontal sigma is in km
+            # Latitude
+            sigma_pixel[1] = km2deg(sigma[1]) / self.d_rtp[1]            
+            # Longitude
+            mean_lat = np.mean(self.latitudes)
+            # 1 deg lon = cos(lat) * 1 deg lat
+            # so X km = km2deg(X) deg lat = km2deg(X) / cos(lat) deg lon
+            sigma_pixel[2] = km2deg(sigma[2]) / np.cos(np.deg2rad(mean_lat)) / self.d_rtp[2]
+        self.vel = gaussian_filter(self.vel, sigma_pixel, **kwargs)
+        if smooth_ani:
+            self.xi = gaussian_filter(self.xi, sigma_pixel, **kwargs)
+            self.eta = gaussian_filter(self.eta, sigma_pixel, **kwargs)
+            self.zeta = gaussian_filter(self.zeta, sigma_pixel, **kwargs)
 
     def calc_dv_avg(self):
         """calculate anomalies relative to average velocity at each depth
