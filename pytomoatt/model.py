@@ -151,13 +151,15 @@ class ATTModel():
         :type smooth_ani: bool
         :param kwargs: Additional arguments passed to scipy.ndimage.gaussian_filter
 
-        Example
-        -------------------
-        To smooth with 5 km in depth and 0.2 degrees in horizontal directions:
-        >>> model.smooth(sigma=[5.0, 0.2, 0.2], unit_deg=True)
+        .. rubric:: Examples
 
-        To smooth with 5 km in depth and 20 km in horizontal directions:
-        >>> model.smooth(sigma=[5.0, 20.0, 20.0], unit_deg=False)
+        To smooth with 5 km in depth and 0.2 degrees in horizontal directions::
+
+            >>> model.smooth(sigma=[5.0, 0.2, 0.2], unit_deg=True)
+
+        To smooth with 5 km in depth and 20 km in horizontal directions::
+
+            >>> model.smooth(sigma=[5.0, 20.0, 20.0], unit_deg=False)
         """
         if np.isscalar(sigma):
             sigma = [sigma, sigma, sigma]
