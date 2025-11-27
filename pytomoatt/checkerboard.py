@@ -133,6 +133,20 @@ class Checker():
         :rtype: Checker
         """
         return copy.deepcopy(self)
+    
+    def to_attmodel(self):
+        """Convert to ATTModel object
+
+        :return: ATTModel object
+        :rtype: ATTModel
+        """
+        from .model import ATTModel
+        mod = ATTModel(self.para_fname)
+        mod.vel = self.vel_pert
+        mod.xi = self.xi
+        mod.eta = self.eta
+        mod.zeta = self.zeta
+        return mod
 
     def write(self, fname):
         """Write new model to h5 file

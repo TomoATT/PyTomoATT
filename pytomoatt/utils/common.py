@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.interpolate import griddata
-import pandas as pd
+from . import _EARTH_RADIUS_KM
 
 def sind(deg):
     rad = np.radians(deg)
@@ -45,8 +45,7 @@ def km2deg(km):
     :return: Distance in degree
     :rtype: float
     """
-    radius = 6371.0
-    circum = 2*np.pi*radius
+    circum = 2*np.pi*_EARTH_RADIUS_KM
     conv = circum / 360
     deg = km / conv
     return deg
@@ -60,8 +59,7 @@ def deg2km(deg):
     :return: Distance in km
     :rtype: float
     """
-    radius = 6371.0
-    circum = 2*np.pi*radius
+    circum = 2*np.pi*_EARTH_RADIUS_KM
     conv = circum / 360
     km = deg * conv
     return km

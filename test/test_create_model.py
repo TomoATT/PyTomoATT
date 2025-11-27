@@ -34,6 +34,8 @@ class TestATTModel():
             lim_y=[-0.5, 0.5],
             lim_z=[10, 120]
         )
+        mod = cm.to_model()
+        mod.to_ani()
 
     def test_read_model(self):
         mod = ATTModel.read(self.out_fname, para_fname=self.para_fname)
@@ -46,6 +48,13 @@ class TestATTModel():
             start_point=[mod.min_max_lon[0], mod.min_max_lat[1]],
             end_point=[mod.min_max_lon[1], mod.min_max_lat[1]], field='vel', flat_earth=True)
 
+    def test_smooth_model(self):
+        mod = ATTModel.read(self.out_fname, para_fname=self.para_fname)
+        mod_test1 = mod.copy()
+        mod_test1.smooth(sigma=[2.0, 0.1, 0.1], unit_deg=True, smooth_ani=False)
+        mod_test2 = mod.copy()
+        mod_test2.smooth(sigma=[5.0, 20, 20], smooth_ani=True)
+        mod_test1.write('smoothed_model1.h5')
 
 if __name__ == '__main__':
     test = TestATTModel()
