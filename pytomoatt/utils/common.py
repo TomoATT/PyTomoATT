@@ -37,6 +37,36 @@ def atand(x):
     return np.degrees(rad)
 
 
+def km2deg(km):
+    """ Convert km to degree
+
+    :param km: Distance in km
+    :type km: float
+    :return: Distance in degree
+    :rtype: float
+    """
+    radius = 6371.0
+    circum = 2*np.pi*radius
+    conv = circum / 360
+    deg = km / conv
+    return deg
+
+
+def deg2km(deg):
+    """ Convert degree to km
+
+    :param deg: Distance in degree
+    :type deg: float
+    :return: Distance in km
+    :rtype: float
+    """
+    radius = 6371.0
+    circum = 2*np.pi*radius
+    conv = circum / 360
+    km = deg * conv
+    return km
+
+
 def WGS84_to_cartesian(dep, lat, lon):
     """
     Convert WGS84 coordinates to cartesian coordinates
