@@ -68,7 +68,6 @@ class CrustModel():
         )
 
         # Grid data 
-        # new_dep, new_lat, new_lon = np.meshgrid(self.dd, self.tt, self.pp, indexing='ij')
         self.log.Modellog.info('Grid data, please wait for a few minutes')
         vel = np.zeros(n_rtp)
         with tqdm(total=self.n_rtp[1] * self.n_rtp[2], desc='Gridding') as pbar:
