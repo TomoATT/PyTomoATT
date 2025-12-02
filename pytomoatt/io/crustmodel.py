@@ -106,9 +106,9 @@ class CrustModel():
             new_lat = self.tt[ilat]
             idx_lat_left, ratio_lat = degree_to_idx_and_ratio(new_lat)
             idx_lat_right = idx_lat_left + 1
-            if(idx_lat_left == -1):     # between -179.5 and +179.5
-                idx_lat_left    = 359
-                idx_lat_right   = 0
+            if idx_lat_left == -1:
+                idx_lat_left = 0
+                idx_lat_right = 1
 
             for ilon in range(self.n_rtp[2]):
                 new_lon = self.pp[ilon]
