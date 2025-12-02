@@ -125,10 +125,18 @@ class CrustModel():
                 key_ur = f"{idx_lon_right:d}_{idx_lat_right:d}"
 
                 # the 1d velocity models at these four points
-                profile_ll = np.array(self.points_dict.get(key_ll, ["out of region, lat: %.4f, lon: %.4f"%(new_lat, new_lon)]))
-                profile_lr = np.array(self.points_dict.get(key_lr, ["out of region, lat: %.4f, lon: %.4f"%(new_lat, new_lon)]))
-                profile_ul = np.array(self.points_dict.get(key_ul, ["out of region, lat: %.4f, lon: %.4f"%(new_lat, new_lon)]))
-                profile_ur = np.array(self.points_dict.get(key_ur, ["out of region, lat: %.4f, lon: %.4f"%(new_lat, new_lon)]))
+                if key_ll not in self.points_dict:
+                    raise KeyError(f"Out of region: lat={new_lat:.4f}, lon={new_lon:.4f} (key: {key_ll})")
+                if key_lr not in self.points_dict:
+                    raise KeyError(f"Out of region: lat={new_lat:.4f}, lon={new_lon:.4f} (key: {key_lr})")
+                if key_ul not in self.points_dict:
+                    raise KeyError(f"Out of region: lat={new_lat:.4f}, lon={new_lon:.4f} (key: {key_ul})")
+                if key_ur not in self.points_dict:
+                    raise KeyError(f"Out of region: lat={new_lat:.4f}, lon={new_lon:.4f} (key: {key_ur})")
+                profile_ll = np.array(self.points_dict[key_ll])
+                profile_lr = np.array(self.points_dict[key_lr])
+                profile_ul = np.array(self.points_dict[key_ul])
+                profile_ur = np.array(self.points_dict[key_ur])
 
                 # do 4 times of the 1D interpolation
                 vel_1d_ll = np.interp(self.dd, profile_ll[:,0], profile_ll[:,col], left=profile_ll[0,col], right=profile_ll[-1,col])
