@@ -27,8 +27,12 @@ def degree_to_idx(degree):
     return int(idx)
 
 def degree_to_idx_and_ratio(degree):
-    """ index and ratio of linear interpolation in crust1.0.h5 model
-    :degree: latitude or longitude
+    """
+    Calculate the index and ratio for linear interpolation in the crust1.0.h5 model.
+
+    :param degree: Latitude or longitude value.
+    :type degree: float
+    :return: A tuple containing the left index (int) and the interpolation ratio (float).
     """
     idx_float = (degree - (-179.5))
     idx_left = int(np.floor(idx_float))
