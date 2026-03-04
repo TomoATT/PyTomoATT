@@ -559,6 +559,90 @@ In this case, please set dist_in_data=True and read again."""
         )
         self.receivers.index = np.arange(len(self.receivers))
 
+    def remove_duplicate_rec_by_src(self, mode="first"):
+        """
+        Remove duplicate receivers for the same source.
+
+        :param mode: "first" to keep only the first occurrence, "mean" to average travel time.
+        :type mode: str
+        """
+        # rec_points
+        if not self.rec_points.empty:
+            before = len(self.rec_points)
+            subset = ["src_index", "staname", "phase"]
+
+            if mode == "mean":
+                # Exclude subset columns from aggregation dictionary to avoid errors
+                agg_cols = [c for c in self.rec_points.columns if c not in subset]
+                agg_dict = {col: "first" for col in agg_cols}
+                agg_dict["tt"] = "mean"
+                if "weight" in self.rec_points.columns:
+                    agg_dict["weight"] = "mean"
+                
+                self.rec_points = self.rec_points.groupby(subset, as_index=False).agg(agg_dict)
+            else:
+                self.rec_points.drop_duplicates(
+                    subset=subset, keep="first", inplace=True, ignore_index=True
+                )
+            self.rec_points.reset_index(drop=True, inplace=True)
+            
+            after = len(self.rec_points)
+            if before != after:
+                self.log.SrcReclog.info(
+                    f"Removed {before - after} duplicate receivers in rec_points"
+                )
+
+        # rec_points_cs
+        if not self.rec_points_cs.empty:
+            before = len(self.rec_points_cs)
+            # subset includes grouping keys
+            subset = ["src_index", "staname1", "staname2", "phase"]
+
+            if mode == "mean":
+                agg_cols = [c for c in self.rec_points_cs.columns if c not in subset]
+                agg_dict = {col: "first" for col in agg_cols}
+                agg_dict["tt"] = "mean"
+                if "weight" in self.rec_points_cs.columns:
+                    agg_dict["weight"] = "mean"
+                
+                self.rec_points_cs = self.rec_points_cs.groupby(subset, as_index=False).agg(agg_dict)
+            else:
+                self.rec_points_cs.drop_duplicates(
+                    subset=subset, keep="first", inplace=True, ignore_index=True
+                )
+            self.rec_points_cs.reset_index(drop=True, inplace=True)
+
+            after = len(self.rec_points_cs)
+            if before != after:
+                self.log.SrcReclog.info(
+                    f"Removed {before - after} duplicate receivers in rec_points_cs"
+                )
+
+        # rec_points_cr
+        if not self.rec_points_cr.empty:
+            before = len(self.rec_points_cr)
+            subset = ["staname", "src_index", "src_index2", "phase"]
+
+            if mode == "mean":
+                agg_cols = [c for c in self.rec_points_cr.columns if c not in subset]
+                agg_dict = {col: "first" for col in agg_cols}
+                agg_dict["tt"] = "mean"
+                if "weight" in self.rec_points_cr.columns:
+                    agg_dict["weight"] = "mean"
+                
+                self.rec_points_cr = self.rec_points_cr.groupby(subset, as_index=False).agg(agg_dict)
+            else:
+                self.rec_points_cr.drop_duplicates(
+                    subset=subset, keep="first", inplace=True, ignore_index=True
+                )
+            self.rec_points_cr.reset_index(drop=True, inplace=True)
+                
+            after = len(self.rec_points_cr)
+            if before != after:
+                self.log.SrcReclog.info(
+                    f"Removed {before - after} duplicate receivers in rec_points_cr"
+                )
+
     def sort(self, by="origin_time"):
         """
         Sort sources by given column
@@ -614,7 +698,7 @@ In this case, please set dist_in_data=True and read again."""
         if not self.rec_points_cr.empty:
             self.rec_points_cr["rec_index"] = self.rec_points_cr.groupby("src_index").cumcount()
 
-    def append(self, sr):
+    def append(self, sr, **kwargs):
         """
         Append another SrcRec object to the current one
         
@@ -624,6 +708,7 @@ In this case, please set dist_in_data=True and read again."""
 
         :param sr: Another SrcRec object
         :type sr: SrcRec
+        :param **kwargs: Additional keyword arguments for updating duplicate receivers
         """
         if not isinstance(sr, SrcRec):
             raise TypeError("Input must be a SrcRec object")
@@ -723,7 +808,7 @@ In this case, please set dist_in_data=True and read again."""
                         [self.rec_points_cr, sr_cr_mapped], ignore_index=True
                     )
 
-        self.update()
+        self.update(**kwargs)
         # store fnames
         self.fnames.extend(sr.fnames)
         
@@ -780,7 +865,7 @@ In this case, please set dist_in_data=True and read again."""
             num = self.rec_points_cs.groupby("src_index").size()
             self.src_points.loc[num.index, "num_rec"] += num
 
-    def update(self):
+    def update(self, mode="mean"):
         """
         Update ``SrcRec.src_points``, ``SrcRec.rec_points``,
         ``SrcRec.rec_points_cr`` and ``SrcRec.rec_points_cs`` with procedures:
@@ -790,12 +875,17 @@ In this case, please set dist_in_data=True and read again."""
         3. update num_rec
         4. reset index
         5. update unique sources and receivers
+        6. remove duplicate receivers by source
+
+        :param mode: "first" to keep only the first occurrence of duplicate receivers, "mean" to average travel time, defaults to "mean"
+        :type mode: str, optional
         """
         self.update_unique_src_rec()
         self.remove_rec_by_new_src()
         self.remove_src_by_new_rec()
         self.update_num_rec()
         self.reset_index()
+        self.remove_duplicate_rec_by_src(mode=mode)
         self.remove_src_by_duplicate_event_id()
         # sort by src_index
         self.src_points.sort_values(by=["src_index"], inplace=True)
@@ -827,7 +917,8 @@ In this case, please set dist_in_data=True and read again."""
         self.log.SrcReclog.info("src_points after removing: ", self.src_points.shape)
 
     def erase_duplicate_events(
-        self, thre_deg: float, thre_dep: float, thre_time_in_min: float
+        self, thre_deg: float, thre_dep: float, thre_time_in_min: float,
+        **kwargs
     ):
         """
         check and count how many events are duplicated,
@@ -928,9 +1019,9 @@ In this case, please set dist_in_data=True and read again."""
             axis=1,
             inplace=True,
         )
-        self.update()
+        self.update(**kwargs)
 
-    def select_by_phase(self, phase_list):
+    def select_by_phase(self, phase_list, **kwargs):
         """
         select interested phase and remove others
 
@@ -951,12 +1042,12 @@ In this case, please set dist_in_data=True and read again."""
         self.rec_points_cr = self.rec_points_cr[
             self.rec_points_cr["phase"].isin([f'{ph},cr' for ph in phase_list])
         ]
-        self.update()
+        self.update(**kwargs)
         self.log.SrcReclog.info(
             "rec_points after selection: {}".format(self._count_records())
         )
 
-    def select_by_datetime(self, time_range):
+    def select_by_datetime(self, time_range, **kwargs):
         """
         select sources and station in a time range
 
@@ -974,7 +1065,7 @@ In this case, please set dist_in_data=True and read again."""
             (self.src_points["origin_time"] >= time_range[0])
             & (self.src_points["origin_time"] <= time_range[1])
         ]
-        self.update()
+        self.update(**kwargs)
         self.log.SrcReclog.info(
             "src_points after selection: {}".format(self.src_points.shape[0])
         )
@@ -982,7 +1073,7 @@ In this case, please set dist_in_data=True and read again."""
             "rec_points after selection: {}".format(self._count_records())
         )
 
-    def remove_specified_recs(self, rec_list):
+    def remove_specified_recs(self, rec_list, **kwargs):
         """Remove specified receivers
 
         :param rec_list: List of receivers to be removed
@@ -992,12 +1083,12 @@ In this case, please set dist_in_data=True and read again."""
             "rec_points before removing: {}".format(self.rec_points.shape)
         )
         self.rec_points = self.rec_points[~self.rec_points["staname"].isin(rec_list)]
-        self.update()
+        self.update(**kwargs)
         self.log.SrcReclog.info(
             "rec_points after removing: {}".format(self.rec_points.shape)
         )
 
-    def select_by_box_region(self, region):
+    def select_by_box_region(self, region, **kwargs):
         """
         Select sources and station in a box region
 
@@ -1030,7 +1121,7 @@ In this case, please set dist_in_data=True and read again."""
         ]
 
         # Remove empty sources
-        self.update()
+        self.update(**kwargs)
         self.log.SrcReclog.info(
             "src_points after selection: {}".format(self.src_points.shape)
         )
@@ -1038,7 +1129,7 @@ In this case, please set dist_in_data=True and read again."""
             "rec_points after selection: {}".format(self.rec_points.shape)
         )
 
-    def select_by_depth(self, dep_min_max):
+    def select_by_depth(self, dep_min_max, **kwargs):
         """Select sources in a range of depth
 
         :param dep_min_max: limit of depth, ``[dep_min, dep_max]``
@@ -1052,7 +1143,7 @@ In this case, please set dist_in_data=True and read again."""
             (self.src_points['evdp'] >= dep_min_max[0]) &
             (self.src_points['evdp'] <= dep_min_max[1])
         ]
-        self.update()
+        self.update(**kwargs)
         self.log.SrcReclog.info('src_points after selection: {}'.format(self.src_points.shape))
         self.log.SrcReclog.info(
             "rec_points after selection: {}".format(self.rec_points.shape)
@@ -1075,7 +1166,7 @@ In this case, please set dist_in_data=True and read again."""
             self.rec_points.loc[rec.index, "az"] = da.az
             self.rec_points.loc[rec.index, "baz"] = da.baz
 
-    def select_by_distance(self, dist_min_max, recalc_dist=False):
+    def select_by_distance(self, dist_min_max, recalc_dist=False, **kwargs):
         """Select stations in a range of distance
         
         .. note::
@@ -1103,12 +1194,12 @@ In this case, please set dist_in_data=True and read again."""
         )
         drop_idx = self.rec_points[mask].index
         self.rec_points = self.rec_points.drop(index=drop_idx)
-        self.update()
+        self.update(**kwargs)
         self.log.SrcReclog.info(
             "rec_points after selection: {}".format(self._count_records())
         )
 
-    def select_by_azi_gap(self, max_azi_gap: float):
+    def select_by_azi_gap(self, max_azi_gap: float, **kwargs):
         """Select sources with azimuthal gap greater and equal than a number
     
         :param azi_gap: threshold of minimum azimuthal gap
@@ -1131,7 +1222,7 @@ In this case, please set dist_in_data=True and read again."""
         max_gap = self.rec_points.groupby('src_index')['az'].apply(lambda x: calc_azi_gap(x.values))
         self.src_points = self.src_points[(max_gap < max_azi_gap)]     
         
-        self.update()
+        self.update(**kwargs)
         self.log.SrcReclog.info(
             "src_points after selection: {}".format(self.src_points.shape[0])
         )
@@ -1139,7 +1230,7 @@ In this case, please set dist_in_data=True and read again."""
             "rec_points after selection: {}".format(self._count_records())
         )
 
-    def select_by_num_rec(self, num_rec: int):
+    def select_by_num_rec(self, num_rec: int, **kwargs):
         """select sources with recievers greater and equal than a number
 
         :param num_rec: threshold of minimum receiver number
@@ -1154,7 +1245,7 @@ In this case, please set dist_in_data=True and read again."""
         )
         self.src_points = self.src_points[(self.src_points["num_rec"] >= num_rec)]
         # self.remove_rec_by_new_src()
-        self.update()
+        self.update(**kwargs)
         self.log.SrcReclog.info(
             "src_points after selection: {}".format(self.src_points.shape[0])
         )
@@ -1185,7 +1276,7 @@ In this case, please set dist_in_data=True and read again."""
             by=["lat_group", "lon_group", "dep_group"]
         )
 
-    def select_one_event_in_each_subgrid(self, d_deg: float, d_km: float):
+    def select_one_event_in_each_subgrid(self, d_deg: float, d_km: float, **kwargs):
         """select one event in each subgrid
 
         :param d_deg: grid size along lat and lon in degree
@@ -1228,7 +1319,7 @@ In this case, please set dist_in_data=True and read again."""
 
         # remove rec_points by new src_points
         # self.remove_rec_by_new_src()
-        self.update()
+        self.update(**kwargs)
 
     def box_weighting(self, d_deg: float, d_km: float, obj="both", dd_weight='average'):
         """Weighting sources and receivers by number in each subgrid
@@ -1373,7 +1464,8 @@ In this case, please set dist_in_data=True and read again."""
             "num_events"
         ].transform("max")
 
-    def generate_double_difference(self, type='cs', max_azi_gap=15, max_dist_gap=2.5, dd_weight='average', recalc_baz=False):
+    def generate_double_difference(self, type='cs', max_azi_gap=15, max_dist_gap=2.5,
+                                    dd_weight='average', recalc_baz=False, **kwargs):
         """
         Generate double difference data
 
@@ -1405,7 +1497,7 @@ In this case, please set dist_in_data=True and read again."""
                 "Only 'cs', 'cr' or 'both' are supported for type of double difference"
             )
 
-        self.update()
+        self.update(**kwargs)
 
     def _generate_cs(self, max_azi_gap, max_dist_gap, dd_weight='average'):
         names, _ = setup_rec_points_dd('cs')
