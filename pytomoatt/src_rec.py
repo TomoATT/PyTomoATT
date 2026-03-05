@@ -712,7 +712,7 @@ In this case, please set dist_in_data=True and read again."""
 
         :param sr: Another SrcRec object
         :type sr: SrcRec
-        :param **kwargs: Additional keyword arguments for updating duplicate receivers
+        :param kwargs: Additional keyword arguments for updating duplicate receivers
         """
         if not isinstance(sr, SrcRec):
             raise TypeError("Input must be a SrcRec object")
