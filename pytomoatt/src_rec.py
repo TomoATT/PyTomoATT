@@ -563,9 +563,13 @@ In this case, please set dist_in_data=True and read again."""
         """
         Remove duplicate receivers for the same source.
 
-        :param mode: "first" to keep only the first occurrence, "mean" to average travel time.
+        :param mode: Either "first" (keep only the first occurrence) or "mean" (average
+                     travel time ``tt`` and ``weight`` if present).
         :type mode: str
+        :raises ValueError: If an unsupported mode is provided.
         """
+        if mode not in ("first", "mean"):
+            raise ValueError(f"Invalid mode: {mode!r}. Supported modes are 'first' and 'mean'.")
         # rec_points
         if not self.rec_points.empty:
             before = len(self.rec_points)
