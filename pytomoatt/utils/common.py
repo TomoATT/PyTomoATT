@@ -199,6 +199,17 @@ def str2val(str_val):
     except ValueError:
         pass
 
+    if str_val.lower() in ['true', 'false', 'yes', 'no']:
+        return str_val.lower() in ['true', 'yes']
+
+    # return list of boolean
+    try:
+        items = [v.strip() for v in str_val.strip('[]').split(',')]
+        if all(v.lower() in ['true', 'false', 'yes', 'no'] for v in items):
+            return [v.lower() in ['true', 'yes'] for v in items]
+    except Exception:
+        pass
+
     return str_val
 
 
