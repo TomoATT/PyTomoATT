@@ -659,13 +659,13 @@ In this case, please set dist_in_data=True and read again."""
         self.src_points.sort_values(by=by, inplace=True)
         self.update()
 
-    def reset_index(self):
+    def reset_index(self, start=0):
         """
         Reset index of source and receivers.
         """
         # self.src_points.index = np.arange(len(self.src_points))
         # use index in self.sources when self.src_points['event_id'] == self.sources['event_id']
-        self.sources.index = np.arange(len(self.sources))
+        self.sources.index = np.arange(start, start + len(self.sources))
         new_index = self.src_points["event_id"].map(
             dict(zip(self.sources["event_id"], self.sources.index))
         )
