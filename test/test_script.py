@@ -3,12 +3,10 @@ from unittest.mock import patch, MagicMock
 import os
 import shutil
 import sys
-from ruamel.yaml import YAML
+from yamlium import parse
 import h5py
 import numpy as np
 from pytomoatt.script import PTA
-
-yaml = YAML()
 
 
 class TestScripts(unittest.TestCase):
@@ -42,8 +40,7 @@ class TestScripts(unittest.TestCase):
         with patch.object(sys, 'argv', ['pta', 'setpar', 'input_params.yml', 'domain.n_rtp', '10,10,10']):
             PTA()
         
-        with open('input_params.yml', 'r') as f:
-            params = yaml.load(f)
+        params = parse('input_params.yml')
         self.assertEqual(params['domain']['n_rtp'], [10, 10, 10])
 
     def test_model2vtk(self):
