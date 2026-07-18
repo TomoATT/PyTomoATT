@@ -21,15 +21,13 @@ jobs:
       with:
         ref: devel
     - name: Set up Python
-      uses: conda-incubator/setup-miniconda@v3
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
-        mamba-version: "*"
-        channels: conda-forge
     - name: Install dependencies
       run: |
-        mamba install numpy scipy h5py pandas xarray hatchling tqdm
         python -m pip install --upgrade pip
+        pip install numpy scipy h5py pandas xarray hatchling tqdm
         pip install .
   test:
     runs-on: ubuntu-latest
