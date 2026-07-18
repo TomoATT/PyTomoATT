@@ -11,7 +11,7 @@ authors = [
 ]
 license = { text = "GPL-3.0" }
 readme = "README.md"
-requires-python = ">=3.9,<4.0"
+requires-python = ">=3.10,<4.0"
 
 dynamic = ["version"]
 
@@ -20,13 +20,14 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
     "numpy>=1.19.0",
     "pandas>=1.4.0",
     "scipy",
     "h5py",
-    "ruamel.yaml",
+    "yamlium>=0.3.0",
     "xarray",
     "tqdm",
     "pyproj",
