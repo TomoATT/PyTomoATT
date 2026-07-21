@@ -1,10 +1,11 @@
 import unittest
 import os
 import shutil
-from yamlium import from_dict, parse
+from ruamel.yaml import YAML
 from pytomoatt.para import ATTPara
 import numpy as np
 
+yaml = YAML()
 
 class TestATTPara(unittest.TestCase):
     def setUp(self):
@@ -27,7 +28,8 @@ class TestATTPara(unittest.TestCase):
             }
         }
         self.fname = 'test_params.yml'
-        from_dict(self.yaml_content).yaml_dump(self.fname)
+        with open(self.fname, 'w') as f:
+            yaml.dump(self.yaml_content, f)
 
     def tearDown(self):
         os.chdir(self.cwd)
@@ -82,7 +84,8 @@ class TestATTPara(unittest.TestCase):
         self.assertTrue(os.path.exists(out_fname))
         
         # Verify content
-        new_params = parse(out_fname)
+        with open(out_fname, 'r') as f:
+            new_params = yaml.load(f)
         self.assertEqual(new_params['domain']['n_rtp'], [30, 30, 30])
 
     def test_write_overwrite(self):
@@ -90,7 +93,8 @@ class TestATTPara(unittest.TestCase):
         para.update_param('domain.n_rtp', '40,40,40')
         para.write() # Should overwrite self.fname
         
-        new_params = parse(self.fname)
+        with open(self.fname, 'r') as f:
+            new_params = yaml.load(f)
         self.assertEqual(new_params['domain']['n_rtp'], [40, 40, 40])
 
 if __name__ == '__main__':

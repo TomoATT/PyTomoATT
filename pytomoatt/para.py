@@ -1,9 +1,8 @@
-from pathlib import Path
-
-from yamlium import parse
-
+from ruamel.yaml import YAML
 from .utils.common import init_axis, str2val
 
+yaml = YAML()
+yaml.default_flow_style = True
 
 class ATTPara:
     """Class for read and write parameter file with ``yaml`` format
@@ -14,7 +13,9 @@ class ATTPara:
         :type fname: str
         """
         self.fname = fname
-        self.input_params = parse(Path(fname))
+        with open(fname, encoding='utf-8') as f:
+            file_data = f.read()
+        self.input_params = yaml.load(file_data)
 
     def init_axis(self):
         dep, lat, lon, dd, dt, dp = init_axis(
@@ -34,11 +35,7 @@ class ATTPara:
         keys = key.split('.')
         param = self.input_params
         for k in keys[:-1]:
-            if k not in param:
-                # Assignment lets yamlium wrap the dict in its Mapping node.
-                # dict.setdefault() bypasses yamlium's conversion logic.
-                param[k] = {}
-            param = param[k]
+            param = param.setdefault(k, {})
         param[keys[-1]] = str2val(value)
 
     def write(self, fname=None):
@@ -49,4 +46,5 @@ class ATTPara:
         """
         if fname is None:
             fname = self.fname
-        self.input_params.yaml_dump(fname)
+        with open(fname, 'w') as f:
+            yaml.dump(self.input_params, f)

@@ -27,7 +27,7 @@ dependencies = [
     "pandas>=1.4.0",
     "scipy",
     "h5py",
-    "yamlium>=0.3.0",
+    "ruamel.yaml",
     "xarray",
     "tqdm",
     "pyproj",
