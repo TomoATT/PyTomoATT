@@ -1214,7 +1214,7 @@ In this case, please set dist_in_data=True and read again."""
 
         if len(valid) < 2 or valid["dist_deg"].nunique() < 2:
             keep.loc[valid.index] = True
-            return keep
+            return keep, None
 
         slope, intercept, residual_std = linear_regression(
             valid["dist_deg"], valid["tt"]
@@ -1224,7 +1224,7 @@ In this case, please set dist_in_data=True and read again."""
             np.isclose(residual, 0.0) if residual_std == 0
             else np.abs(residual) <= std_multiplier * residual_std
         )
-        return keep
+        return keep, (slope, intercept)
 
     def _filter_double_difference_by_arrivals(self):
         """Remove double differences whose absolute arrivals were rejected."""
@@ -1289,6 +1289,9 @@ In this case, please set dist_in_data=True and read again."""
         :type recalc_dist: bool
         :param separate_phase: Fit each phase separately, defaults to True.
         :type separate_phase: bool
+        :return: Mapping from phase name to ``(slope, intercept)``. When
+                 ``separate_phase=False``, the key is ``"all"``.
+        :rtype: dict
         """
         if (not np.isscalar(std_multiplier)
                 or not np.isfinite(std_multiplier)
@@ -1307,11 +1310,15 @@ In this case, please set dist_in_data=True and read again."""
         keep = pd.Series(False, index=self.rec_points.index, dtype=bool)
         groups = (self.rec_points.groupby("phase", dropna=False)
                   if separate_phase else [("all", self.rec_points)])
+        regression_params = {}
 
-        for _, records in groups:
-            keep.loc[records.index] = self._regression_keep_mask(
+        for phase, records in groups:
+            group_keep, params = self._regression_keep_mask(
                 records, std_multiplier
             )
+            keep.loc[records.index] = group_keep
+            if params is not None:
+                regression_params[phase] = params
 
         self.rec_points = self.rec_points.loc[keep]
         self._filter_double_difference_by_arrivals()
@@ -1321,6 +1328,7 @@ In this case, please set dist_in_data=True and read again."""
                 self.rec_points.shape[0]
             )
         )
+        return regression_params
 
     def select_by_azi_gap(self, max_azi_gap: float, **kwargs):
         """Select sources with azimuthal gap greater and equal than a number

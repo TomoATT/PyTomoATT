@@ -98,8 +98,17 @@ class TestSrcRec(unittest.TestCase):
         })
 
         with patch.object(sr, 'update') as update:
-            sr.select_by_linear_regression(std_multiplier=3.0)
+            regression_params = sr.select_by_linear_regression(
+                std_multiplier=3.0
+            )
 
+        expected_slope, expected_intercept = np.polyfit(
+            distance, travel_time, deg=1
+        )
+        self.assertIn('P', regression_params)
+        slope, intercept = regression_params['P']
+        self.assertAlmostEqual(slope, expected_slope)
+        self.assertAlmostEqual(intercept, expected_intercept)
         self.assertEqual(sr.rec_points.shape[0], 22)
         self.assertNotIn(10, sr.rec_points.index)
         self.assertEqual(sr.rec_points_cs.shape[0], 1)
