@@ -5,11 +5,13 @@ from pytomoatt.utils.src_rec_utils import (
     get_rec_points_types,
     setup_rec_points_dd,
     update_position,
-    download_src_rec_file
+    download_src_rec_file,
+    linear_regression,
 )
 from os.path import dirname, join
 from unittest.mock import MagicMock, patch
 import pandas as pd
+import numpy as np
 import io
 
 
@@ -70,8 +72,52 @@ class TestSrcRec(unittest.TestCase):
         sr = SrcRec.read(self.fname)
         sr.box_weighting(0.4, 10, obj='both')
 
+    def test_select_by_linear_regression(self):
+        sr = SrcRec('unused')
+        distance = np.concatenate((np.arange(21, dtype=float), [10.0, 0.0]))
+        travel_time = 2.0 * distance + 5.0
+        travel_time[10] += 100.0
+        sr.rec_points = pd.DataFrame({
+            'src_index': [0] * 21 + [1, 1],
+            'staname': [f'STA{i:02d}' for i in range(21)] + ['STA10', 'STA00'],
+            'dist_deg': distance,
+            'tt': travel_time,
+            'phase': 'P',
+        })
+        sr.rec_points_cs = pd.DataFrame({
+            'src_index': [0, 0],
+            'staname1': ['STA10', 'STA00'],
+            'staname2': ['STA00', 'STA01'],
+            'phase': ['P,cs', 'P,cs'],
+        })
+        sr.rec_points_cr = pd.DataFrame({
+            'src_index': [0, 0],
+            'src_index2': [1, 1],
+            'staname': ['STA10', 'STA00'],
+            'phase': ['P,cr', 'P,cr'],
+        })
+
+        with patch.object(sr, 'update') as update:
+            sr.select_by_linear_regression(std_multiplier=3.0)
+
+        self.assertEqual(sr.rec_points.shape[0], 22)
+        self.assertNotIn(10, sr.rec_points.index)
+        self.assertEqual(sr.rec_points_cs.shape[0], 1)
+        self.assertEqual(sr.rec_points_cs.iloc[0]['staname1'], 'STA00')
+        self.assertEqual(sr.rec_points_cr.shape[0], 1)
+        self.assertEqual(sr.rec_points_cr.iloc[0]['staname'], 'STA00')
+        update.assert_called_once_with()
+
 
 class TestSrcRecUtils(unittest.TestCase):
+    def test_linear_regression(self):
+        slope, intercept, std = linear_regression(
+            [0.0, 1.0, 2.0], [1.0, 3.0, 5.0]
+        )
+        self.assertAlmostEqual(slope, 2.0)
+        self.assertAlmostEqual(intercept, 1.0)
+        self.assertAlmostEqual(std, 0.0)
+
     def test_define_rec_cols(self):
         # Case 1: dist_in_data=False, name_net_and_sta=False
         cols, last_col = define_rec_cols(False, False)
@@ -198,5 +244,3 @@ class TestSrcRecUtils(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-
-

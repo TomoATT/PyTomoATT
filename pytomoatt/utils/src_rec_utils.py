@@ -1,5 +1,6 @@
 import io
 import tqdm
+import numpy as np
 
 
 def define_rec_cols(dist_in_data, name_net_and_sta):
@@ -244,3 +245,35 @@ def download_src_rec_file(url):
     else:
         response.release_conn()
         return None
+
+
+def linear_regression(x, y):
+    """Fit a line and return its slope, intercept and residual standard deviation.
+
+    Non-finite pairs are ignored. At least two samples with different
+    x-coordinates are required.
+
+    :param x: Independent variable.
+    :type x: array-like
+    :param y: Dependent variable.
+    :type y: array-like
+    :return: Slope, intercept and standard deviation of the residuals.
+    :rtype: tuple of float
+    """
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    if x.ndim != 1 or y.ndim != 1 or x.shape != y.shape:
+        raise ValueError("x and y must be one-dimensional arrays of equal length")
+
+    finite = np.isfinite(x) & np.isfinite(y)
+    x = x[finite]
+    y = y[finite]
+    if x.size < 2:
+        raise ValueError("at least two finite samples are required")
+    if np.ptp(x) == 0:
+        raise ValueError("x must contain at least two distinct values")
+
+    slope, intercept = np.polyfit(x, y, deg=1)
+    residual = y - (slope * x + intercept)
+    std = np.std(residual)
+    return float(slope), float(intercept), float(std)

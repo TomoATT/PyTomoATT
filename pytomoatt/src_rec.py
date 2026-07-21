@@ -4,7 +4,8 @@ import pandas as pd
 from .distaz import DistAZ
 from .setuplog import SetupLog
 from .utils.src_rec_utils import define_rec_cols, setup_rec_points_dd, \
-                                 get_rec_points_types, update_position
+                                 get_rec_points_types, update_position, \
+                                 linear_regression
 from sklearn.metrics.pairwise import haversine_distances
 import copy
 from io import StringIO
@@ -1201,6 +1202,124 @@ In this case, please set dist_in_data=True and read again."""
         self.update(**kwargs)
         self.log.SrcReclog.info(
             "rec_points after selection: {}".format(self._count_records())
+        )
+
+    @staticmethod
+    def _regression_keep_mask(records, std_multiplier):
+        """Return a mask for finite records within the residual limit."""
+        finite = np.isfinite(records["dist_deg"].to_numpy(dtype=float)) & \
+                 np.isfinite(records["tt"].to_numpy(dtype=float))
+        valid = records.loc[finite]
+        keep = pd.Series(False, index=records.index, dtype=bool)
+
+        if len(valid) < 2 or valid["dist_deg"].nunique() < 2:
+            keep.loc[valid.index] = True
+            return keep
+
+        slope, intercept, residual_std = linear_regression(
+            valid["dist_deg"], valid["tt"]
+        )
+        residual = valid["tt"] - (slope * valid["dist_deg"] + intercept)
+        keep.loc[valid.index] = (
+            np.isclose(residual, 0.0) if residual_std == 0
+            else np.abs(residual) <= std_multiplier * residual_std
+        )
+        return keep
+
+    def _filter_double_difference_by_arrivals(self):
+        """Remove double differences whose absolute arrivals were rejected."""
+        arrivals = set(
+            self.rec_points[["src_index", "staname", "phase"]]
+            .itertuples(index=False, name=None)
+        )
+        specs = (
+            ("rec_points_cs", ",cs",
+             (("src_index", "staname1"), ("src_index", "staname2")),
+             "common-source"),
+            ("rec_points_cr", ",cr",
+             (("src_index", "staname"), ("src_index2", "staname")),
+             "common-receiver"),
+        )
+
+        for attr, suffix, endpoints, label in specs:
+            records = getattr(self, attr)
+            if records.empty:
+                continue
+
+            phases = records["phase"].map(
+                lambda phase: phase[:-len(suffix)]
+                if isinstance(phase, str) and phase.endswith(suffix)
+                else phase
+            )
+            keep = np.ones(len(records), dtype=bool)
+            for src_col, sta_col in endpoints:
+                keys = zip(records[src_col], records[sta_col], phases)
+                keep &= np.fromiter(
+                    (key in arrivals for key in keys), bool, len(records)
+                )
+
+            setattr(self, attr, records.loc[keep])
+            self.log.SrcReclog.info(
+                "Removed {} corresponding {} records".format(
+                    len(records) - np.count_nonzero(keep), label
+                )
+            )
+
+    def select_by_linear_regression(self, std_multiplier=3.0,
+                                    recalc_dist=False, separate_phase=True,
+                                    **kwargs):
+        """Select absolute travel times by linear-regression residual.
+
+        A straight line is fitted between epicentral distance and travel time.
+        Records whose absolute residual is greater than ``std_multiplier``
+        times the residual standard deviation are removed. By default each
+        phase is fitted separately so that phases with different apparent
+        velocities are not mixed.
+
+        .. note::
+            This criterion only applies to absolute travel-time data in
+            :attr:`rec_points`. A double-difference record is removed when
+            either of its corresponding absolute travel times is rejected.
+
+        :param std_multiplier: Multiplier applied to the residual standard
+                               deviation, defaults to 3.
+        :type std_multiplier: float
+        :param recalc_dist: Recalculate epicentral distance even when
+                           ``dist_deg`` exists, defaults to False.
+        :type recalc_dist: bool
+        :param separate_phase: Fit each phase separately, defaults to True.
+        :type separate_phase: bool
+        """
+        if (not np.isscalar(std_multiplier)
+                or not np.isfinite(std_multiplier)
+                or std_multiplier <= 0):
+            raise ValueError("std_multiplier must be a positive finite number")
+
+        self.log.SrcReclog.info(
+            "rec_points before travel-time selection: {}".format(
+                self.rec_points.shape[0]
+            )
+        )
+        if ("dist_deg" not in self.rec_points) or recalc_dist:
+            self.log.SrcReclog.info("Calculating epicentral distance...")
+            self.calc_distaz()
+
+        keep = pd.Series(False, index=self.rec_points.index, dtype=bool)
+        groups = (self.rec_points.groupby("phase", dropna=False)
+                  if separate_phase else [("all", self.rec_points)])
+
+        for _, records in groups:
+            keep.loc[records.index] = self._regression_keep_mask(
+                records, std_multiplier
+            )
+
+        self.rec_points = self.rec_points.loc[keep]
+        self._filter_double_difference_by_arrivals()
+        self.update(**kwargs)
+        self.log.SrcReclog.info(
+            "rec_points after travel-time selection: {}".format(
+                self.rec_points.shape[0]
+            )
         )
 
     def select_by_azi_gap(self, max_azi_gap: float, **kwargs):
