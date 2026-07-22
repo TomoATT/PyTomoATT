@@ -22,7 +22,10 @@ class Checker():
             self.vel = f['vel'][:]
             self.eta = f['eta'][:]
             self.xi = f['xi'][:]
-            self.zeta = f['zeta'][:]
+            try:    # some model may not have zeta
+                self.zeta = f['zeta'][:]
+            except:
+                pass
         self._init_axis()
 
     def _init_axis(self):
