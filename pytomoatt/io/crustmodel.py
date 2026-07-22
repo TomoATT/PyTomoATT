@@ -73,9 +73,11 @@ class CrustModel():
 
         # rotate reversely, from computational grid to physical grid
         if rotate is not None:
-            central_lat     = rotate[0]
-            central_lon     = rotate[1]
-            rotation_angle  = rotate[2]
+            try:
+                central_lat, central_lon, rotation_angle = rotate
+            except (TypeError, ValueError):
+                self.log.Modellog.error("rotate must be a 3-item sequence: [central_lat, central_lon, rotation_angle]")
+                sys.exit(1)
             tt_2d, pp_2d = rtp_rotation_reverse(tt_2d, pp_2d, central_lat, central_lon, rotation_angle)
 
         # Grid data 
