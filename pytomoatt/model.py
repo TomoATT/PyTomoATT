@@ -107,7 +107,7 @@ class ATTModel():
 
         :param type: Specify velocity type of ``vp`` or ``vs``, defaults to 'vp'
         :type type: str, optional
-        :rotate: Rotation parameters [theta0, phi0, psi], defaults to None
+        :param rotate: Rotation parameters [central_lat, central_lon, rotation_angle] in degrees, defaults to None
         """
         cm = CrustModel()
         self.vel = cm.griddata(
