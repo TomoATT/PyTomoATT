@@ -102,18 +102,20 @@ class ATTModel():
         )
         return dataset
 
-    def grid_data_crust1(self, type='vp'):
+    def grid_data_crust1(self, type='vp', rotate=None):
         """Grid data from CRUST1.0 model
 
         :param type: Specify velocity type of ``vp`` or ``vs``, defaults to 'vp'
         :type type: str, optional
+        :rotate: Rotation parameters [theta0, phi0, psi], defaults to None
         """
         cm = CrustModel()
         self.vel = cm.griddata(
             self.min_max_dep,
             self.min_max_lat,
             self.min_max_lon, 
-            self.n_rtp, type=type
+            self.n_rtp, type=type,
+            rotate=rotate
         )
         
     def grid_data_ascii(self, model_fname:str, **kwargs):

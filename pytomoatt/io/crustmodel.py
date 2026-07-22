@@ -2,6 +2,7 @@ import numpy as np
 from os.path import dirname, abspath, join
 from ..utils.common import init_axis
 from ..setuplog import SetupLog
+from ..utils.rotate import rtp_rotation_reverse
 import pickle
 import sys
 from tqdm import tqdm
@@ -40,7 +41,7 @@ class CrustModel():
             self.points_dict = pickle.load(f)
         self.log = SetupLog()
 
-    def griddata(self, min_max_dep, min_max_lat, min_max_lon, n_rtp, type='vp'):
+    def griddata(self, min_max_dep, min_max_lat, min_max_lon, n_rtp, type='vp', rotate=None):
         """Linearly interpolate velocity into regular grids
 
         :param min_max_dep: min and max depth, ``[min_dep, max_dep]``
@@ -63,25 +64,38 @@ class CrustModel():
         else:
             self.log.Modellog.error(f"Velocity type {type} not supported in CRUST1.0 model")
             sys.exit(1)
+
         self.dd, self.tt, self.pp, _, _, _, = init_axis(
             min_max_dep, min_max_lat, min_max_lon, n_rtp
         )
+
+        tt_2d, pp_2d = np.meshgrid(self.tt, self.pp, indexing='ij')
+
+        # rotate reversely, from computational grid to physical grid
+        if rotate is not None:
+            central_lat     = rotate[0]
+            central_lon     = rotate[1]
+            rotation_angle  = rotate[2]
+            tt_2d, pp_2d = rtp_rotation_reverse(tt_2d, pp_2d, central_lat, central_lon, rotation_angle)
 
         # Grid data 
         self.log.Modellog.info('Grid data, please wait for a few minutes')
         vel = np.zeros(n_rtp)
         with tqdm(total=self.n_rtp[1] * self.n_rtp[2], desc='Gridding') as pbar:
             for ilat in range(self.n_rtp[1]):
-                new_lat = self.tt[ilat]
-                idx_lat_left, ratio_lat = degree_to_idx_and_ratio(new_lat)
-                idx_lat_right = idx_lat_left + 1
-                if idx_lat_left == -1:
-                    idx_lat_left = 0
-                    idx_lat_right = 1
-
                 for ilon in range(self.n_rtp[2]):
                     pbar.update(1)
-                    new_lon = self.pp[ilon]
+                    
+                    # latitude index and ratio
+                    new_lat = tt_2d[ilat, ilon]
+                    idx_lat_left, ratio_lat = degree_to_idx_and_ratio(new_lat)
+                    idx_lat_right = idx_lat_left + 1
+                    if idx_lat_left == -1:
+                        idx_lat_left = 0
+                        idx_lat_right = 1
+                    
+                    # longitude index and ratio
+                    new_lon = pp_2d[ilat, ilon]
                     idx_lon_left, ratio_lon = degree_to_idx_and_ratio(new_lon)
                     idx_lon_right = idx_lon_left + 1
                     if idx_lon_left == -1:  # between -179.5 and +179.5
