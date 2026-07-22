@@ -25,7 +25,7 @@ class Checker():
             try:    # some model may not have zeta
                 self.zeta = f['zeta'][:]
             except:
-                pass
+                self.zeta = np.zeros_like(self.vel)
         self._init_axis()
 
     def _init_axis(self):
