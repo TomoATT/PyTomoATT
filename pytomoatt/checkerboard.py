@@ -22,7 +22,10 @@ class Checker():
             self.vel = f['vel'][:]
             self.eta = f['eta'][:]
             self.xi = f['xi'][:]
-            self.zeta = f['zeta'][:]
+            if 'zeta' in f:  # some model may not have zeta
+                self.zeta = f['zeta'][:]
+            else:
+                self.zeta = np.zeros_like(self.vel)
         self._init_axis()
 
     def _init_axis(self):
