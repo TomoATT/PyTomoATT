@@ -1,4 +1,5 @@
 import numpy as np
+from .utils.common import deg2km
 
 
 # Geographic latitude is converted to geocentric latitude before calculating
@@ -160,4 +161,4 @@ class DistAZ:
         return self.baz
 
     def degreesToKilometers(self):
-        return self.delta * 111.19
+        return deg2km(self.delta)

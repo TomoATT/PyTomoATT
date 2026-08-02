@@ -7,7 +7,9 @@ from typing import TYPE_CHECKING, Literal
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.colors import Normalize
 from matplotlib.figure import Figure
+from matplotlib.transforms import Bbox
 
 if TYPE_CHECKING:
     from pytomoatt.src_rec import SrcRec
@@ -110,11 +112,19 @@ def plot_src_rec(
     if receivers is None or receivers.empty:
         receiver_lon = np.empty(0)
         receiver_lat = np.empty(0)
+        receiver_color_values = None
     else:
         _check_columns(receivers, {"stlo", "stla"}, "receivers")
         receiver_values = receivers[["stlo", "stla"]].to_numpy(dtype=float)
         finite_receivers = np.isfinite(receiver_values).all(axis=1)
         receiver_lon, receiver_lat = receiver_values[finite_receivers].T
+        receiver_color_values = None
+        if color_by == "weight" and "weight" in receivers:
+            receiver_color_values = np.asarray(
+                receivers.loc[finite_receivers, "weight"], dtype=float
+            )
+            if not np.isfinite(receiver_color_values).all():
+                raise ValueError("receivers contains non-finite weights")
 
     all_lon = np.concatenate((source_lon, receiver_lon))
     all_lat = np.concatenate((source_lat, receiver_lat))
@@ -149,7 +159,10 @@ def plot_src_rec(
     longitude_depth_axis = figure.add_subplot(grid[1, 0], sharex=map_axis)
     colorbar_host = figure.add_subplot(grid[1, 1])
     colorbar_host.set_axis_off()
-    colorbar_axis = colorbar_host.inset_axes((0.05, 0.52, 0.9, 0.12))
+    source_colorbar_y = 0.68 if receiver_color_values is not None else 0.52
+    colorbar_axis = colorbar_host.inset_axes(
+        (0.05, source_colorbar_y, 0.9, 0.12)
+    )
 
     scatter_options = {
         "c": color_values,
@@ -158,20 +171,48 @@ def plot_src_rec(
         "label": "Sources",
     }
     scatter_options.update(kwargs)
-    source_scatter = map_axis.scatter(source_lon, source_lat, **scatter_options)
-    latitude_depth_axis.scatter(source_depth, source_lat, **scatter_options)
-    longitude_depth_axis.scatter(source_lon, source_depth, **scatter_options)
+    if color_by == "weight" and "norm" not in scatter_options:
+        vmin = scatter_options.pop("vmin", None)
+        vmax = scatter_options.pop("vmax", None)
+        shared_norm = Normalize(vmin=vmin, vmax=vmax)
+        shared_norm.autoscale_None(color_values)
+        scatter_options["norm"] = shared_norm
 
+    source_scatter = map_axis.scatter(source_lon, source_lat, **scatter_options)
+    section_scatter_options = scatter_options.copy()
+    section_scatter_options["norm"] = source_scatter.norm
+    section_scatter_options.pop("vmin", None)
+    section_scatter_options.pop("vmax", None)
+    latitude_depth_axis.scatter(
+        source_depth, source_lat, **section_scatter_options
+    )
+    longitude_depth_axis.scatter(
+        source_lon, source_depth, **section_scatter_options
+    )
+
+    receiver_scatter = None
     if receiver_lon.size:
-        map_axis.scatter(
+        receiver_scatter_options = {
+            "edgecolors": "white",
+            "linewidths": 0.5,
+            "label": "Receivers",
+            "marker": "v",
+            "s": 55,
+        }
+        if receiver_color_values is None:
+            receiver_scatter_options["c"] = "tab:red"
+        else:
+            receiver_norm = Normalize()
+            receiver_norm.autoscale_None(receiver_color_values)
+            receiver_scatter_options.update({
+                "c": receiver_color_values,
+                "cmap": source_scatter.cmap,
+                "norm": receiver_norm,
+            })
+        receiver_scatter = map_axis.scatter(
             receiver_lon,
             receiver_lat,
-            c="tab:red",
-            edgecolors="white",
-            linewidths=0.5,
-            label="Receivers",
-            marker="v",
-            s=55,
+            **receiver_scatter_options,
         )
 
     map_axis.set(
@@ -180,6 +221,58 @@ def plot_src_rec(
         xlim=lon_limits,
         ylim=lat_limits,
     )
+    map_axis.set_aspect("equal", adjustable="box")
+
+    def _align_latitude_depth_axis(axis, renderer):
+        lower_section_position = longitude_depth_axis.get_position(
+            original=True
+        )
+        map_position = map_axis.get_position()
+        # Reuse the lower section's automatically calculated padding so the
+        # right and lower gaps are equal in physical units for any figure size.
+        section_gap_inches = (
+            map_position.y0 - lower_section_position.y1
+        ) * figure.get_figheight()
+        horizontal_gap = section_gap_inches / figure.get_figwidth()
+        depth_length_inches = (
+            lower_section_position.height * figure.get_figheight()
+        )
+        section_width = depth_length_inches / figure.get_figwidth()
+        section_x0 = map_position.x1 + horizontal_gap
+        return Bbox.from_extents(
+            section_x0,
+            map_position.y0,
+            section_x0 + section_width,
+            map_position.y1,
+        )
+
+    def _align_longitude_depth_axis(axis, renderer):
+        section_position = axis.get_position(original=True)
+        map_position = map_axis.get_position()
+        return Bbox.from_extents(
+            map_position.x0,
+            section_position.y0,
+            map_position.x1,
+            section_position.y1,
+        )
+
+    def _align_colorbar_host(axis, renderer):
+        right_position = _align_latitude_depth_axis(
+            latitude_depth_axis, renderer
+        )
+        lower_position = _align_longitude_depth_axis(
+            longitude_depth_axis, renderer
+        )
+        return Bbox.from_extents(
+            right_position.x0,
+            lower_position.y0,
+            right_position.x1,
+            lower_position.y1,
+        )
+
+    latitude_depth_axis.set_axes_locator(_align_latitude_depth_axis)
+    longitude_depth_axis.set_axes_locator(_align_longitude_depth_axis)
+    colorbar_host.set_axes_locator(_align_colorbar_host)
     map_axis.legend()
 
     latitude_depth_axis.set(
@@ -188,6 +281,8 @@ def plot_src_rec(
         xlim=depth_limits,
         ylim=lat_limits,
     )
+    latitude_depth_axis.yaxis.tick_right()
+    latitude_depth_axis.yaxis.set_label_position("right")
     longitude_depth_axis.set(
         xlabel="Longitude",
         ylabel="Depth (km)",
@@ -202,6 +297,17 @@ def plot_src_rec(
         orientation="horizontal",
     )
     colorbar.set_label(colorbar_label)
+
+    if receiver_color_values is not None and receiver_scatter is not None:
+        receiver_colorbar_axis = colorbar_host.inset_axes(
+            (0.05, 0.22, 0.9, 0.12)
+        )
+        receiver_colorbar = figure.colorbar(
+            receiver_scatter,
+            cax=receiver_colorbar_axis,
+            orientation="horizontal",
+        )
+        receiver_colorbar.set_label("Receiver weight")
 
     if fname is not None:
         figure.savefig(fname, dpi=300, bbox_inches="tight")
@@ -223,21 +329,29 @@ def fig_ev_st_distribution_dep(
 def plot_travel_time(
     src_rec: "SrcRec",
     *,
-    color="tab:blue",
+    distance: Literal["dist_deg", "dist_km", "dist_3d_km"] = "dist_3d_km",
+    color=None,
     fname: str | PathLike[str] | None = None,
     fig: Figure | None = None,
     ylim="adaptive",
     **kwargs,
 ) -> Figure:
-    """Plot absolute travel time against epicentral distance.
+    """Plot absolute travel time against source--receiver distance.
 
     Parameters
     ----------
     src_rec
         A :class:`~pytomoatt.src_rec.SrcRec` instance whose ``rec_points``
-        contains ``dist_deg`` and ``tt`` columns.
+        contains the selected distance column and ``tt``.
+    distance
+        Distance column used for the x-axis: ``"dist_3d_km"`` (default) for
+        three-dimensional source--receiver distance in kilometres,
+        ``"dist_deg"`` for epicentral distance in degrees, or ``"dist_km"``
+        for epicentral distance in kilometres.
     color
-        Any Matplotlib-compatible color specification for the points.
+        Any Matplotlib-compatible color specification for the points. When
+        ``None`` (default), Matplotlib selects the next color from the current
+        axis color cycle.
     fname
         Optional output path. The format is inferred by Matplotlib from the
         filename extension.
@@ -246,7 +360,7 @@ def plot_travel_time(
         axis; an axis is created when the figure has none.
     ylim
         Y-axis scaling strategy. ``"adaptive"`` (default) uses travel times
-        at the minimum and maximum epicentral distances, ``"auto"`` or
+        at the minimum and maximum selected distances, ``"auto"`` or
         ``None`` uses Matplotlib autoscaling, ``"inherit"`` preserves the
         current limits of an existing figure, and a ``(min, max)`` pair sets
         explicit limits.
@@ -260,12 +374,17 @@ def plot_travel_time(
         The created figure. Its axis is available as ``figure.axes[0]`` for
         adding lines, annotations, or other content.
     """
+    if distance not in {"dist_deg", "dist_km", "dist_3d_km"}:
+        raise ValueError(
+            "distance must be 'dist_deg', 'dist_km', or 'dist_3d_km'"
+        )
+
     records = src_rec.rec_points
-    _check_columns(records, {"dist_deg", "tt"}, "rec_points")
+    _check_columns(records, {distance, "tt"}, "rec_points")
     if records.empty:
         raise ValueError("Cannot plot travel times without receiver records")
 
-    values = records[["dist_deg", "tt"]].to_numpy(dtype=float)
+    values = records[[distance, "tt"]].to_numpy(dtype=float)
     finite = np.isfinite(values).all(axis=1)
     if not finite.any():
         raise ValueError("rec_points contains no finite distance--time pairs")
@@ -290,11 +409,18 @@ def plot_travel_time(
     else:
         raise TypeError("fig must be a matplotlib.figure.Figure or None")
 
-    scatter_options = {"color": color, "s": 4}
+    scatter_options = {"s": 4}
+    if color is not None:
+        scatter_options["color"] = color
     scatter_options.update(kwargs)
     axis.scatter(values[finite, 0], values[finite, 1], **scatter_options)
+    distance_label = {
+        "dist_deg": "Epicentral distance (degree)",
+        "dist_km": "Epicentral distance (km)",
+        "dist_3d_km": "3-D source-receiver distance (km)",
+    }[distance]
     axis.set(
-        xlabel="Epicentral distance (degree)",
+        xlabel=distance_label,
         ylabel="Travel time (s)",
     )
 

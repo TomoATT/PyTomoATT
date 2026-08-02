@@ -16,6 +16,7 @@ import numpy as np
 import io
 import matplotlib.pyplot as plt
 from matplotlib.colors import to_rgba
+from sklearn.metrics.pairwise import haversine_distances
 
 
 class TestSrcRec(unittest.TestCase):
@@ -32,6 +33,32 @@ class TestSrcRec(unittest.TestCase):
             FileNotFoundError, "src_rec file not found"
         ):
             SrcRec.read(missing_file)
+
+    def test_conflicting_receiver_warning_lists_station_names(self):
+        sr = SrcRec("unused")
+        sr.src_points = pd.DataFrame({
+            "event_id": ["EVENT_0"],
+            "evla": [1.0],
+            "evlo": [2.0],
+            "evdp": [3.0],
+        })
+        sr.rec_points = pd.DataFrame({
+            "staname": ["STA_CONFLICT", "STA_CONFLICT", "STA_OK"],
+            "stla": [10.0, 10.1, 20.0],
+            "stlo": [30.0, 30.0, 40.0],
+            "stel": [0.0, 0.0, 0.0],
+        })
+
+        with self.assertLogs("SrcRec", level="WARNING") as captured_logs:
+            sr.update_unique_src_rec()
+
+        warning = captured_logs.output[0]
+        self.assertIn("1 receiver(s): STA_CONFLICT", warning)
+        self.assertNotIn("Keeping", warning)
+        self.assertEqual(
+            sr.receivers["staname"].tolist(),
+            ["STA_CONFLICT", "STA_OK"],
+        )
 
     def test_read_reindexes_duplicate_file_src_indices(self):
         sr = SrcRec.read(self.duplicate_index_fname)
@@ -105,15 +132,82 @@ class TestSrcRec(unittest.TestCase):
         sr = SrcRec.read(self.fname)
         sr.box_weighting(0.4, 10, obj='both')
 
+    def test_box_weighting_receiver_does_not_require_depth_size(self):
+        sr = SrcRec('unused')
+
+        with (
+            patch.object(sr, '_box_weighting_ev') as weight_sources,
+            patch.object(sr, '_box_weighting_st') as weight_receivers,
+        ):
+            sr.box_weighting(d_deg=0.4, obj='rec')
+
+        weight_sources.assert_not_called()
+        weight_receivers.assert_called_once_with(0.4, 'average')
+
+    def test_box_weighting_requires_depth_size_for_sources(self):
+        sr = SrcRec('unused')
+
+        with self.assertRaisesRegex(ValueError, 'd_km'):
+            sr.box_weighting(d_deg=0.4, obj='src')
+        with self.assertRaisesRegex(ValueError, 'd_km'):
+            sr.box_weighting(d_deg=0.4, obj='both')
+
+    def test_box_weighting_receiver_uses_horizontal_cells_only(self):
+        sr = SrcRec('unused')
+        sr.receivers = pd.DataFrame({
+            'staname': ['STA0', 'STA1', 'STA2'],
+            'stla': [0.1, 0.2, 2.1],
+            'stlo': [0.1, 0.2, 2.1],
+            'stel': [0.0, 5000.0, 100.0],
+        })
+        sr.rec_points = pd.DataFrame({
+            'staname': ['STA0', 'STA1', 'STA2'],
+            'weight': [1.0, 1.0, 1.0],
+        })
+        sr.src_points = pd.DataFrame({
+            'event_id': ['E0'],
+            'weight': [0.5],
+        })
+        sr.rec_points_cs = pd.DataFrame({
+            'staname1': ['STA0'],
+            'staname2': ['STA1'],
+            'weight': [1.0],
+        })
+        sr.rec_points_cr = pd.DataFrame({
+            'staname': ['STA2'],
+            'event_id2': ['E0'],
+            'weight': [1.0],
+        })
+
+        sr.box_weighting(d_deg=1.0, obj='rec')
+
+        expected_dense_weight = 1.0 / np.sqrt(2.0)
+        receiver_weights = sr.receivers.set_index('staname')['weight']
+        self.assertAlmostEqual(receiver_weights['STA0'], expected_dense_weight)
+        self.assertAlmostEqual(receiver_weights['STA1'], expected_dense_weight)
+        self.assertAlmostEqual(receiver_weights['STA2'], 1.0)
+        self.assertTrue(np.allclose(
+            sr.rec_points['weight'],
+            sr.rec_points['staname'].map(receiver_weights),
+        ))
+        self.assertAlmostEqual(
+            sr.rec_points_cs.iloc[0]['weight'], expected_dense_weight
+        )
+        self.assertAlmostEqual(sr.rec_points_cr.iloc[0]['weight'], 0.75)
+
     def test_select_by_linear_regression(self):
         sr = SrcRec('unused')
         distance = np.concatenate((np.arange(21, dtype=float), [10.0, 0.0]))
+        distance_km = distance * 100.0
+        distance_3d_km = distance_km + 10.0
         travel_time = 2.0 * distance + 5.0
         travel_time[10] += 100.0
         sr.rec_points = pd.DataFrame({
             'src_index': [0] * 21 + [1, 1],
             'staname': [f'STA{i:02d}' for i in range(21)] + ['STA10', 'STA00'],
             'dist_deg': distance,
+            'dist_km': distance_km,
+            'dist_3d_km': distance_3d_km,
             'tt': travel_time,
             'phase': 'P',
         })
@@ -132,16 +226,18 @@ class TestSrcRec(unittest.TestCase):
 
         with patch.object(sr, 'update') as update:
             regression_params = sr.select_by_linear_regression(
-                std_multiplier=3.0
+                std_multiplier=3.0,
+                distance='dist_3d_km',
             )
 
-        expected_slope, expected_intercept = np.polyfit(
-            distance, travel_time, deg=1
+        expected_slope, expected_intercept, expected_std = linear_regression(
+            distance_3d_km, travel_time
         )
         self.assertIn('P', regression_params)
-        slope, intercept = regression_params['P']
+        slope, intercept, residual_std = regression_params['P']
         self.assertAlmostEqual(slope, expected_slope)
         self.assertAlmostEqual(intercept, expected_intercept)
+        self.assertAlmostEqual(residual_std, expected_std)
         self.assertEqual(sr.rec_points.shape[0], 22)
         self.assertNotIn(10, sr.rec_points.index)
         self.assertEqual(sr.rec_points_cs.shape[0], 1)
@@ -149,6 +245,245 @@ class TestSrcRec(unittest.TestCase):
         self.assertEqual(sr.rec_points_cr.shape[0], 1)
         self.assertEqual(sr.rec_points_cr.iloc[0]['staname'], 'STA00')
         update.assert_called_once_with()
+
+    def test_linear_regression_method(self):
+        sr = SrcRec('unused')
+        distance = np.arange(5, dtype=float)
+        p_travel_time = np.array([4.0, 7.0, 10.0, 13.0, 17.0])
+        sr.rec_points = pd.DataFrame({
+            'dist_deg': np.concatenate((distance, distance)),
+            'dist_km': np.concatenate((distance * 10.0, distance * 10.0)),
+            'dist_3d_km': np.concatenate(
+                (distance * 10.0 + 2.0, distance * 10.0 + 2.0)
+            ),
+            'tt': np.concatenate((p_travel_time, 5.0 * distance + 2.0)),
+            'phase': ['P'] * 5 + ['S'] * 5,
+        })
+        original = sr.rec_points.copy(deep=True)
+
+        result = sr.linear_regression(phase='P')
+        expected = linear_regression(distance * 10.0 + 2.0, p_travel_time)
+
+        for actual_value, expected_value in zip(result, expected):
+            self.assertAlmostEqual(actual_value, expected_value)
+
+        result_deg = sr.linear_regression(phase='P', distance='dist_deg')
+        expected_deg = linear_regression(distance, p_travel_time)
+        for actual_value, expected_value in zip(result_deg, expected_deg):
+            self.assertAlmostEqual(actual_value, expected_value)
+        pd.testing.assert_frame_equal(sr.rec_points, original)
+
+    def test_linear_regression_method_calculates_distance(self):
+        sr = SrcRec('unused')
+        sr.rec_points = pd.DataFrame({
+            'tt': [2.0, 5.0, 8.0],
+            'phase': ['P', 'P', 'P'],
+        })
+
+        def add_distance():
+            sr.rec_points['dist_3d_km'] = [0.0, 1.0, 2.0]
+
+        with patch.object(sr, 'calc_distaz', side_effect=add_distance) as calc:
+            slope, intercept, residual_std = sr.linear_regression()
+
+        self.assertAlmostEqual(slope, 3.0)
+        self.assertAlmostEqual(intercept, 2.0)
+        self.assertAlmostEqual(residual_std, 0.0)
+        calc.assert_called_once_with()
+
+    def test_calc_distaz_calculates_source_receiver_distance(self):
+        sr = SrcRec('unused')
+        sr.src_points = pd.DataFrame({
+            'evla': [10.0],
+            'evlo': [20.0],
+            'evdp': [10.0],
+        })
+        sr.rec_points = pd.DataFrame({
+            'src_index': [0],
+            'stla': [10.0],
+            'stlo': [20.0],
+            'stel': [1000.0],
+        })
+
+        sr.calc_distaz()
+
+        self.assertAlmostEqual(sr.rec_points.loc[0, 'dist_deg'], 0.0)
+        self.assertAlmostEqual(sr.rec_points.loc[0, 'dist_km'], 0.0)
+        self.assertAlmostEqual(sr.rec_points.loc[0, 'dist_3d_km'], 11.0)
+
+    def test_calc_weights_uses_lat_lon_order_and_normalizes(self):
+        sr = SrcRec('unused')
+        latitude = np.array([0.0, 60.0, 10.0])
+        longitude = np.array([0.0, 10.0, 170.0])
+        scale = 0.5
+
+        weights = sr._calc_weights(latitude, longitude, scale)
+
+        points_rad = np.deg2rad(np.column_stack((latitude, longitude)))
+        distances = haversine_distances(points_rad)
+        reference_distance = scale * distances.mean()
+        expected = np.reciprocal(
+            np.exp(-((distances / reference_distance) ** 2)).sum(axis=0)
+        )
+        expected /= expected.max()
+        self.assertTrue(np.allclose(weights, expected))
+        self.assertAlmostEqual(weights.max(), 1.0)
+
+    def test_geo_weighting_maps_and_normalizes_all_weights(self):
+        sr = SrcRec('unused')
+        sr.src_points = pd.DataFrame({
+            'event_id': ['E0', 'E1', 'E2'],
+            'evla': [0.0, 1.0, 3.0],
+            'evlo': [0.0, 2.0, 1.0],
+            'evdp': [5.0, 10.0, 15.0],
+            'weight': [1.0, 1.0, 1.0],
+        })
+        sr.rec_points = pd.DataFrame({
+            'src_index': [0, 1, 2],
+            'staname': ['STA0', 'STA1', 'STA2'],
+            'stla': [0.0, 2.0, 1.0],
+            'stlo': [0.0, 1.0, 4.0],
+            'stel': [0.0, 100.0, 200.0],
+            'phase': ['P', 'P', 'P'],
+            'tt': [1.0, 2.0, 3.0],
+            'weight': [1.0, 1.0, 1.0],
+        })
+        sr.rec_points_cs = pd.DataFrame({
+            'src_index': [0],
+            'staname1': ['STA0'],
+            'stla1': [0.0],
+            'stlo1': [0.0],
+            'stel1': [0.0],
+            'staname2': ['STA1'],
+            'stla2': [2.0],
+            'stlo2': [1.0],
+            'stel2': [100.0],
+            'phase': ['P,cs'],
+            'weight': [1.0],
+        })
+        sr.rec_points_cr = pd.DataFrame({
+            'src_index': [0],
+            'src_index2': [1],
+            'event_id2': ['E1'],
+            'evla2': [1.0],
+            'evlo2': [2.0],
+            'evdp2': [10.0],
+            'staname': ['STA0'],
+            'stla': [0.0],
+            'stlo': [0.0],
+            'stel': [0.0],
+            'phase': ['P,cr'],
+            'weight': [1.0],
+        })
+        sr.update_unique_src_rec()
+
+        sr.geo_weighting(scale=0.5, obj='both', dd_weight='multiply')
+
+        source_weights = sr.src_points.set_index('event_id')['weight']
+        receiver_weights = sr.receivers.set_index('staname')['weight']
+        self.assertTrue(np.allclose(
+            sr.sources['weight'], sr.sources['event_id'].map(source_weights)
+        ))
+        self.assertTrue(np.allclose(
+            sr.rec_points['weight'],
+            sr.rec_points['staname'].map(receiver_weights),
+        ))
+        expected_cs_weight = (
+            receiver_weights['STA0'] * receiver_weights['STA1']
+        )
+        expected_cr_weight = receiver_weights['STA0'] * source_weights['E1']
+        self.assertAlmostEqual(
+            sr.rec_points_cs.iloc[0]['weight'], expected_cs_weight
+        )
+        self.assertAlmostEqual(
+            sr.rec_points_cr.iloc[0]['weight'], expected_cr_weight
+        )
+
+        all_weights = np.concatenate((
+            sr.src_points['weight'].to_numpy(),
+            sr.sources['weight'].to_numpy(),
+            sr.receivers['weight'].to_numpy(),
+            sr.rec_points['weight'].to_numpy(),
+            sr.rec_points_cs['weight'].to_numpy(),
+            sr.rec_points_cr['weight'].to_numpy(),
+        ))
+        self.assertAlmostEqual(all_weights.max(), 1.0)
+        self.assertTrue(np.all(all_weights <= 1.0))
+
+    def test_geo_weighting_deduplicates_receiver_names(self):
+        sr = SrcRec('unused')
+        sr.receivers = pd.DataFrame({
+            'staname': ['STA0', 'STA0', 'STA1'],
+            'stla': [0.0, 0.1, 1.0],
+            'stlo': [0.0, 0.1, 2.0],
+            'stel': [0.0, 10.0, 20.0],
+        })
+        sr.rec_points = pd.DataFrame({
+            'staname': ['STA0', 'STA1'],
+            'weight': [1.0, 1.0],
+        })
+
+        sr.geo_weighting(scale=0.5, obj='rec')
+
+        self.assertEqual(sr.receivers['staname'].tolist(), ['STA0', 'STA1'])
+        receiver_weights = sr.receivers.set_index('staname')['weight']
+        self.assertTrue(np.allclose(
+            sr.rec_points['weight'],
+            sr.rec_points['staname'].map(receiver_weights),
+        ))
+        self.assertAlmostEqual(sr.receivers['weight'].max(), 1.0)
+
+    def test_select_by_distance_filters_double_differences(self):
+        sr = SrcRec('unused')
+        sr.src_points = pd.DataFrame({
+            'evla': [0.0, 0.0],
+            'evlo': [0.0, 0.5],
+        }, index=[0, 1])
+        sr.rec_points = pd.DataFrame({
+            'src_index': [0, 0],
+            'staname': ['ABS_IN', 'ABS_OUT'],
+            'dist_deg': [0.5, 2.0],
+            'dist_km': [55.6, 222.4],
+            'phase': ['P', 'P'],
+        })
+        sr.rec_points_cs = pd.DataFrame({
+            'src_index': [0],
+            'staname1': ['STA1'],
+            'stla1': [0.0],
+            'stlo1': [0.5],
+            'staname2': ['STA2'],
+            'stla2': [0.0],
+            'stlo2': [2.0],
+            'phase': ['P,cs'],
+        })
+        sr.rec_points_cr = pd.DataFrame({
+            'src_index': [0, 0],
+            'src_index2': [1, 1],
+            'event_id2': ['EVT1', 'EVT1'],
+            'staname': ['STA1', 'STA2'],
+            'stla': [0.0, 0.0],
+            'stlo': [0.5, 0.5],
+            'evla2': [0.0, 0.0],
+            'evlo2': [0.2, 2.0],
+            'phase': ['P,cr', 'P,cr'],
+        })
+
+        with patch.object(sr, 'update') as update:
+            sr.select_by_distance(
+                [0.0, 112.0],
+                distance='dist_km',
+            )
+
+        self.assertEqual(sr.rec_points['staname'].tolist(), ['ABS_IN'])
+        self.assertTrue(sr.rec_points_cs.empty)
+        self.assertEqual(sr.rec_points_cr['staname'].tolist(), ['STA1'])
+        update.assert_called_once_with()
+
+    def test_select_by_distance_rejects_invalid_distance(self):
+        sr = SrcRec('unused')
+
+        with self.assertRaisesRegex(ValueError, 'distance'):
+            sr.select_by_distance([0.0, 1.0], distance='dist_3d_km')
 
     def test_select_by_constant_velocity(self):
         sr = SrcRec('unused')
@@ -211,7 +546,84 @@ class TestSrcRec(unittest.TestCase):
         self.assertAlmostEqual(map_position.y1, latitude_depth_position.y1)
         self.assertAlmostEqual(map_position.x0, longitude_depth_position.x0)
         self.assertAlmostEqual(map_position.x1, longitude_depth_position.x1)
+        right_gap = (
+            latitude_depth_position.x0 - map_position.x1
+        ) * figure.get_figwidth()
+        lower_gap = (
+            map_position.y0 - longitude_depth_position.y1
+        ) * figure.get_figheight()
+        self.assertAlmostEqual(right_gap, lower_gap)
+        right_depth_length = (
+            latitude_depth_position.width * figure.get_figwidth()
+        )
+        lower_depth_length = (
+            longitude_depth_position.height * figure.get_figheight()
+        )
+        self.assertAlmostEqual(right_depth_length, lower_depth_length)
+        colorbar_position = figure.axes[3].get_position()
+        self.assertAlmostEqual(
+            colorbar_position.x0, latitude_depth_position.x0
+        )
+        self.assertAlmostEqual(
+            colorbar_position.x1, latitude_depth_position.x1
+        )
+        self.assertAlmostEqual(
+            colorbar_position.y0, longitude_depth_position.y0
+        )
+        self.assertAlmostEqual(
+            colorbar_position.y1, longitude_depth_position.y1
+        )
+        self.assertEqual(
+            figure.axes[1].yaxis.get_ticks_position(), "right"
+        )
+        self.assertEqual(
+            figure.axes[1].yaxis.get_label_position(), "right"
+        )
+        self.assertEqual(figure.axes[0].get_aspect(), 1.0)
+        self.assertEqual(figure.axes[0].get_adjustable(), "box")
+        map_xlim = figure.axes[0].get_xlim()
+        map_ylim = figure.axes[0].get_ylim()
+        longitude_scale = map_position.width / (map_xlim[1] - map_xlim[0])
+        latitude_scale = map_position.height / (map_ylim[1] - map_ylim[0])
+        self.assertAlmostEqual(longitude_scale, latitude_scale)
         plt.close(figure)
+
+    def test_write_sources_and_receivers_format_weights(self):
+        sr = SrcRec("unused")
+        sr.sources = pd.DataFrame({
+            "event_id": ["EVENT_0", "EVENT_1"],
+            "evla": [1.0, 2.0],
+            "evlo": [3.0, 4.0],
+            "evdp": [5.0, 6.0],
+            "weight": [1.0 / 3.0, 1.0],
+        })
+        sr.receivers = pd.DataFrame({
+            "staname": ["STA0", "STA1"],
+            "stla": [1.0, 2.0],
+            "stlo": [3.0, 4.0],
+            "stel": [5.0, 6.0],
+            "weight": [2.0 / 3.0, 1.0],
+        })
+
+        with TemporaryDirectory() as output_directory:
+            source_file = join(output_directory, "sources.txt")
+            receiver_file = join(output_directory, "receivers.txt")
+            sr.write_sources(source_file)
+            sr.write_receivers(receiver_file)
+
+            with open(source_file) as output:
+                source_weights = [
+                    line.split()[-1] for line in output if line.strip()
+                ]
+            with open(receiver_file) as output:
+                receiver_weights = [
+                    line.split()[-1] for line in output if line.strip()
+                ]
+
+        self.assertEqual(source_weights, ["0.3333", "1.0000"])
+        self.assertEqual(receiver_weights, ["0.6667", "1.0000"])
+        self.assertEqual(sr.sources.loc[0, "weight"], 1.0 / 3.0)
+        self.assertEqual(sr.receivers.loc[0, "weight"], 2.0 / 3.0)
 
     def test_plot_source_only(self):
         sr = SrcRec.read(self.fname, src_only=True)
@@ -219,6 +631,55 @@ class TestSrcRec(unittest.TestCase):
         figure = sr.plot(color_by="weight")
 
         self.assertIsNotNone(figure)
+        plt.close(figure)
+
+    def test_plot_uses_shared_norm_for_constant_weights(self):
+        sr = SrcRec.read(self.fname, src_only=True)
+        sr.src_points['weight'] = 1.0
+
+        figure = sr.plot(color_by='weight')
+        figure.canvas.draw()
+        source_collections = [axis.collections[0] for axis in figure.axes[:3]]
+
+        self.assertIs(
+            source_collections[0].norm, source_collections[1].norm
+        )
+        self.assertIs(
+            source_collections[0].norm, source_collections[2].norm
+        )
+        reference_colors = source_collections[0].get_facecolors()
+        for collection in source_collections[1:]:
+            self.assertTrue(np.allclose(
+                collection.get_facecolors(), reference_colors
+            ))
+        plt.close(figure)
+
+    def test_plot_colors_receivers_by_weight(self):
+        sr = SrcRec.read(self.fname)
+        sr.geo_weighting(obj='both')
+
+        figure = sr.plot(color_by='weight')
+        figure.canvas.draw()
+        source_collection = figure.axes[0].collections[0]
+        receiver_collection = figure.axes[0].collections[1]
+        source_index = sr.src_points['weight'].to_numpy().argmax()
+        receiver_index = sr.receivers['weight'].to_numpy().argmax()
+
+        self.assertIsNot(source_collection.norm, receiver_collection.norm)
+        self.assertIs(source_collection.cmap, receiver_collection.cmap)
+        self.assertTrue(np.allclose(
+            source_collection.get_facecolors()[source_index],
+            receiver_collection.get_facecolors()[receiver_index],
+        ))
+        self.assertEqual(
+            source_collection.norm(sr.src_points['weight'].max()),
+            receiver_collection.norm(sr.receivers['weight'].max()),
+        )
+        colorbar_labels = {
+            axis.get_xlabel() for axis in figure.axes[3].child_axes
+        }
+        self.assertIn('Source weight', colorbar_labels)
+        self.assertIn('Receiver weight', colorbar_labels)
         plt.close(figure)
 
     def test_plot_rejects_invalid_color_by(self):
@@ -241,7 +702,7 @@ class TestSrcRec(unittest.TestCase):
     def test_plot_travel_time_returns_editable_figure(self):
         sr = SrcRec('unused')
         sr.rec_points = pd.DataFrame({
-            'dist_deg': [0.0, 1.0, np.nan],
+            'dist_3d_km': [0.0, 1.0, np.nan],
             'tt': [1.0, 3.0, 5.0],
         })
 
@@ -263,7 +724,7 @@ class TestSrcRec(unittest.TestCase):
         sr.rec_points = pd.DataFrame({'tt': [1.0, 2.0]})
 
         def add_distance():
-            sr.rec_points['dist_deg'] = [0.0, 1.0]
+            sr.rec_points['dist_3d_km'] = [0.0, 1.0]
 
         with patch.object(sr, 'calc_distaz', side_effect=add_distance) as calc:
             figure = sr.plot_travel_time()
@@ -271,10 +732,54 @@ class TestSrcRec(unittest.TestCase):
         calc.assert_called_once_with()
         plt.close(figure)
 
-    def test_plot_travel_time_uses_existing_figure(self):
+    def test_plot_travel_time_uses_kilometres(self):
         sr = SrcRec('unused')
         sr.rec_points = pd.DataFrame({
             'dist_deg': [0.0, 1.0],
+            'dist_km': [0.0, 111.19],
+            'tt': [1.0, 3.0],
+        })
+
+        figure = sr.plot_travel_time(distance='dist_km')
+        axis = figure.axes[0]
+        offsets = axis.collections[0].get_offsets()
+
+        self.assertTrue(np.allclose(offsets[:, 0], [0.0, 111.19]))
+        self.assertEqual(axis.get_xlabel(), 'Epicentral distance (km)')
+        plt.close(figure)
+
+    def test_plot_travel_time_defaults_to_3d_distance(self):
+        sr = SrcRec('unused')
+        sr.rec_points = pd.DataFrame({
+            'dist_deg': [1.0, 2.0],
+            'dist_3d_km': [120.0, 230.0],
+            'tt': [10.0, 20.0],
+        })
+
+        figure = sr.plot_travel_time()
+        axis = figure.axes[0]
+        offsets = axis.collections[0].get_offsets()
+
+        self.assertTrue(np.allclose(offsets[:, 0], [120.0, 230.0]))
+        self.assertEqual(
+            axis.get_xlabel(), '3-D source-receiver distance (km)'
+        )
+        plt.close(figure)
+
+    def test_plot_travel_time_rejects_invalid_distance(self):
+        sr = SrcRec('unused')
+        sr.rec_points = pd.DataFrame({
+            'dist_3d_km': [0.0, 1.0],
+            'tt': [1.0, 3.0],
+        })
+
+        with self.assertRaisesRegex(ValueError, 'distance'):
+            sr.plot_travel_time(distance='miles')
+
+    def test_plot_travel_time_uses_existing_figure(self):
+        sr = SrcRec('unused')
+        sr.rec_points = pd.DataFrame({
+            'dist_3d_km': [0.0, 1.0],
             'tt': [1.0, 3.0],
         })
         existing_figure, axis = plt.subplots()
@@ -293,7 +798,7 @@ class TestSrcRec(unittest.TestCase):
     def test_plot_travel_time_inherits_y_limits(self):
         sr = SrcRec('unused')
         sr.rec_points = pd.DataFrame({
-            'dist_deg': [0.0, 1.0],
+            'dist_3d_km': [0.0, 1.0],
             'tt': [1.0, 30.0],
         })
         existing_figure, axis = plt.subplots()
@@ -308,10 +813,25 @@ class TestSrcRec(unittest.TestCase):
         self.assertEqual(axis.get_ylim(), (5.0, 20.0))
         plt.close(existing_figure)
 
+    def test_plot_travel_time_uses_matplotlib_color_cycle(self):
+        sr = SrcRec('unused')
+        sr.rec_points = pd.DataFrame({
+            'dist_3d_km': [0.0, 1.0],
+            'tt': [1.0, 2.0],
+        })
+
+        figure = sr.plot_travel_time()
+        first_color = figure.axes[0].collections[-1].get_facecolors()[0]
+        sr.plot_travel_time(fig=figure, ylim='inherit')
+        second_color = figure.axes[0].collections[-1].get_facecolors()[0]
+
+        self.assertFalse(np.allclose(first_color, second_color))
+        plt.close(figure)
+
     def test_plot_travel_time_y_limits(self):
         sr = SrcRec('unused')
         sr.rec_points = pd.DataFrame({
-            'dist_deg': [0.0, 1.0, 2.0, 3.0, 4.0],
+            'dist_3d_km': [0.0, 1.0, 2.0, 3.0, 4.0],
             'tt': [1.0, 2.0, 1000.0, 4.0, 5.0],
         })
 
