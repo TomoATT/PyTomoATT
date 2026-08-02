@@ -9,15 +9,48 @@ from pytomoatt.utils.src_rec_utils import (
     linear_regression,
 )
 from os.path import dirname, join
+from tempfile import TemporaryDirectory
 from unittest.mock import MagicMock, patch
 import pandas as pd
 import numpy as np
 import io
+import matplotlib.pyplot as plt
+from matplotlib.colors import to_rgba
 
 
 class TestSrcRec(unittest.TestCase):
     fname: str = join(dirname(dirname(__file__)), 'examples', 'src_rec_file_eg')
     fname1: str = join(dirname(__file__), 'test_srcrec_a.dat')
+    duplicate_index_fname: str = join(
+        dirname(__file__), 'src_rec_duplicate_index.dat'
+    )
+
+    def test_read_missing_local_file(self):
+        missing_file = join(dirname(__file__), "missing_src_rec.dat")
+
+        with self.assertRaisesRegex(
+            FileNotFoundError, "src_rec file not found"
+        ):
+            SrcRec.read(missing_file)
+
+    def test_read_reindexes_duplicate_file_src_indices(self):
+        sr = SrcRec.read(self.duplicate_index_fname)
+
+        self.assertEqual(sr.src_points.index.tolist(), [0, 1])
+        self.assertEqual(sr.src_points['event_id'].tolist(), ['EVT_A', 'EVT_B'])
+        self.assertEqual(sr.rec_points['src_index'].tolist(), [0, 1])
+        self.assertEqual(sr.rec_points_cs['src_index'].tolist(), [0])
+        self.assertEqual(sr.rec_points_cr['src_index'].tolist(), [0])
+        self.assertEqual(sr.rec_points_cr['src_index2'].tolist(), [1])
+
+        with TemporaryDirectory() as directory:
+            output_file = join(directory, 'src_rec.dat')
+            sr.write(output_file)
+            reread = SrcRec.read(output_file)
+
+        self.assertEqual(reread.src_points.index.tolist(), [0, 1])
+        self.assertEqual(reread.rec_points['src_index'].tolist(), [0, 1])
+        self.assertEqual(reread.rec_points_cr['src_index2'].tolist(), [1])
 
     def test_subcase_01(self):
         sr = SrcRec.read(self.fname)
@@ -116,6 +149,185 @@ class TestSrcRec(unittest.TestCase):
         self.assertEqual(sr.rec_points_cr.shape[0], 1)
         self.assertEqual(sr.rec_points_cr.iloc[0]['staname'], 'STA00')
         update.assert_called_once_with()
+
+    def test_select_by_constant_velocity(self):
+        sr = SrcRec('unused')
+        distance = np.array([0.0, 1.0, 2.0, 3.0, 0.0])
+        reference_tt = np.deg2rad(distance) * 6371.0 / 10.0
+        sr.rec_points = pd.DataFrame({
+            'src_index': [0, 0, 0, 0, 1],
+            'staname': ['STA0', 'STA1', 'STA2', 'STA3', 'STA0'],
+            'dist_deg': distance,
+            'tt': reference_tt + np.array([-1.0, 0.0, 2.0, 2.1, 0.0]),
+            'phase': ['P'] * 5,
+        })
+        sr.rec_points_cs = pd.DataFrame({
+            'src_index': [0, 0],
+            'staname1': ['STA0', 'STA0'],
+            'staname2': ['STA1', 'STA3'],
+            'phase': ['P,cs', 'P,cs'],
+        })
+        sr.rec_points_cr = pd.DataFrame({
+            'src_index': [0, 0],
+            'src_index2': [1, 1],
+            'staname': ['STA0', 'STA3'],
+            'phase': ['P,cr', 'P,cr'],
+        })
+
+        with patch.object(sr, 'update') as update:
+            sr.select_by_constant_velocity(
+                velocity=10.0,
+                tt_res_range=(-1.0, 2.0),
+            )
+
+        self.assertEqual(sr.rec_points.shape[0], 4)
+        self.assertNotIn('STA3', sr.rec_points['staname'].values)
+        self.assertEqual(sr.rec_points_cs.shape[0], 1)
+        self.assertEqual(sr.rec_points_cr.shape[0], 1)
+        update.assert_called_once_with()
+
+    def test_select_by_constant_velocity_validates_parameters(self):
+        sr = SrcRec('unused')
+
+        with self.assertRaisesRegex(ValueError, 'velocity'):
+            sr.select_by_constant_velocity(0.0, (-1.0, 1.0))
+        with self.assertRaisesRegex(ValueError, 'tt_res_range'):
+            sr.select_by_constant_velocity(1.0, (2.0, 1.0))
+
+    def test_plot(self):
+        sr = SrcRec.read(self.fname)
+        original_columns = sr.src_points.columns.copy()
+
+        figure = sr.plot()
+        figure.canvas.draw()
+
+        self.assertIsNotNone(figure)
+        self.assertTrue(np.allclose(figure.get_size_inches(), (8.0, 8.0)))
+        self.assertTrue(original_columns.equals(sr.src_points.columns))
+        map_position = figure.axes[0].get_position()
+        latitude_depth_position = figure.axes[1].get_position()
+        longitude_depth_position = figure.axes[2].get_position()
+        self.assertAlmostEqual(map_position.y0, latitude_depth_position.y0)
+        self.assertAlmostEqual(map_position.y1, latitude_depth_position.y1)
+        self.assertAlmostEqual(map_position.x0, longitude_depth_position.x0)
+        self.assertAlmostEqual(map_position.x1, longitude_depth_position.x1)
+        plt.close(figure)
+
+    def test_plot_source_only(self):
+        sr = SrcRec.read(self.fname, src_only=True)
+
+        figure = sr.plot(color_by="weight")
+
+        self.assertIsNotNone(figure)
+        plt.close(figure)
+
+    def test_plot_rejects_invalid_color_by(self):
+        sr = SrcRec.read(self.fname, src_only=True)
+
+        with self.assertRaisesRegex(ValueError, "color_by"):
+            sr.plot(color_by="magnitude")
+
+    def test_plot_accepts_matplotlib_scatter_options(self):
+        sr = SrcRec.read(self.fname, src_only=True)
+
+        figure = sr.plot(cmap="jet", s=12, alpha=0.5, marker="x")
+        source_collection = figure.axes[0].collections[0]
+
+        self.assertEqual(source_collection.get_cmap().name, "jet")
+        self.assertEqual(source_collection.get_sizes()[0], 12)
+        self.assertEqual(source_collection.get_alpha(), 0.5)
+        plt.close(figure)
+
+    def test_plot_travel_time_returns_editable_figure(self):
+        sr = SrcRec('unused')
+        sr.rec_points = pd.DataFrame({
+            'dist_deg': [0.0, 1.0, np.nan],
+            'tt': [1.0, 3.0, 5.0],
+        })
+
+        figure = sr.plot_travel_time(color='red', s=12, alpha=0.5)
+        axis = figure.axes[0]
+        collection = axis.collections[0]
+        line = axis.plot([0.0, 1.0], [1.0, 3.0])[0]
+
+        self.assertEqual(collection.get_offsets().shape[0], 2)
+        self.assertTrue(np.allclose(figure.get_size_inches(), (6.0, 4.5)))
+        self.assertTrue(
+            np.allclose(collection.get_facecolors()[0], to_rgba('red', 0.5))
+        )
+        self.assertIn(line, axis.lines)
+        plt.close(figure)
+
+    def test_plot_travel_time_calculates_missing_distance(self):
+        sr = SrcRec('unused')
+        sr.rec_points = pd.DataFrame({'tt': [1.0, 2.0]})
+
+        def add_distance():
+            sr.rec_points['dist_deg'] = [0.0, 1.0]
+
+        with patch.object(sr, 'calc_distaz', side_effect=add_distance) as calc:
+            figure = sr.plot_travel_time()
+
+        calc.assert_called_once_with()
+        plt.close(figure)
+
+    def test_plot_travel_time_uses_existing_figure(self):
+        sr = SrcRec('unused')
+        sr.rec_points = pd.DataFrame({
+            'dist_deg': [0.0, 1.0],
+            'tt': [1.0, 3.0],
+        })
+        existing_figure, axis = plt.subplots()
+        existing_line = axis.plot([0.0, 1.0], [0.0, 2.0])[0]
+
+        returned_figure = sr.plot_travel_time(
+            fig=existing_figure,
+            color='red',
+        )
+
+        self.assertIs(returned_figure, existing_figure)
+        self.assertIn(existing_line, axis.lines)
+        self.assertEqual(len(axis.collections), 1)
+        plt.close(existing_figure)
+
+    def test_plot_travel_time_inherits_y_limits(self):
+        sr = SrcRec('unused')
+        sr.rec_points = pd.DataFrame({
+            'dist_deg': [0.0, 1.0],
+            'tt': [1.0, 30.0],
+        })
+        existing_figure, axis = plt.subplots()
+        axis.set_ylim(5.0, 20.0)
+
+        returned_figure = sr.plot_travel_time(
+            fig=existing_figure,
+            ylim='inherit',
+        )
+
+        self.assertIs(returned_figure, existing_figure)
+        self.assertEqual(axis.get_ylim(), (5.0, 20.0))
+        plt.close(existing_figure)
+
+    def test_plot_travel_time_y_limits(self):
+        sr = SrcRec('unused')
+        sr.rec_points = pd.DataFrame({
+            'dist_deg': [0.0, 1.0, 2.0, 3.0, 4.0],
+            'tt': [1.0, 2.0, 1000.0, 4.0, 5.0],
+        })
+
+        adaptive_figure = sr.plot_travel_time()
+        auto_figure = sr.plot_travel_time(ylim='auto')
+        explicit_figure = sr.plot_travel_time(ylim=(0.0, 10.0))
+
+        adaptive_limits = adaptive_figure.axes[0].get_ylim()
+        self.assertLess(adaptive_limits[0], 1.0)
+        self.assertGreater(adaptive_limits[1], 5.0)
+        self.assertLess(adaptive_limits[1], 1000.0)
+        self.assertGreater(auto_figure.axes[0].get_ylim()[1], 1000.0)
+        self.assertEqual(explicit_figure.axes[0].get_ylim(), (0.0, 10.0))
+        plt.close(adaptive_figure)
+        plt.close(auto_figure)
+        plt.close(explicit_figure)
 
 
 class TestSrcRecUtils(unittest.TestCase):

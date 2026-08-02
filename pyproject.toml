@@ -25,6 +25,7 @@ classifiers = [
 dependencies = [
     "numpy>=1.26.4",
     "pandas>=1.4.0",
+    "matplotlib",
     "scipy",
     "h5py",
     "ruamel.yaml",

@@ -3,13 +3,16 @@ import tqdm
 import pandas as pd
 from .distaz import DistAZ
 from .setuplog import SetupLog
+from .utils import _EARTH_RADIUS_KM
 from .utils.src_rec_utils import define_rec_cols, setup_rec_points_dd, \
                                  get_rec_points_types, update_position, \
                                  linear_regression
 from sklearn.metrics.pairwise import haversine_distances
 import copy
 from io import StringIO
+from numbers import Real
 import os
+from urllib.parse import urlparse
 
 pd.options.mode.chained_assignment = None  # default='warn'
 
@@ -220,6 +223,11 @@ class SrcRec:
         """
         Read source <--> receiver file to pandas.DataFrame
 
+        Source indices in the file are treated as local labels and may be
+        duplicated. Sources are reassigned consecutive ``src_index`` values
+        from zero in file order, and all receiver records are remapped to the
+        new indices using source blocks and unique event IDs.
+
         :param fname: Path to src_rec file
         :type fname: str
         :param dist_in_data: Whether distance is included in the src_rec file
@@ -230,7 +238,14 @@ class SrcRec:
         :rtype: SrcRec
         """
         sr = cls(fname=fname, **kwargs)
-        if not os.path.exists(fname):
+        parsed_url = urlparse(str(fname))
+        is_remote = (
+            parsed_url.scheme in {"http", "https"}
+            and bool(parsed_url.netloc)
+        )
+        if os.path.exists(fname):
+            src_rec_data = fname
+        elif is_remote:
             sr.log.SrcReclog.info("Downloading src_rec file from {}".format(fname))
             try:
                 from .utils.src_rec_utils import download_src_rec_file
@@ -242,18 +257,47 @@ class SrcRec:
                 sr.log.SrcReclog.error("Failed to download src_rec file from {}".format(fname))
                 return sr
         else:
-            src_rec_data = fname 
+            raise FileNotFoundError(f"src_rec file not found: {fname}")
+
         alldf = pd.read_csv(
                 src_rec_data, sep=r"\s+", header=None, comment="#", low_memory=False, dtype={12: str}
             )
 
         last_col_src = 12
         dd_col = 11
-        # this is a source line if the last column is not NaN
-        # sr.src_points = alldf[pd.notna(alldf[last_col_src])]
-        sr.src_points = alldf[~(alldf[dd_col].astype(str).str.contains("cs")| \
-                                alldf[dd_col].astype(str).str.contains("cr")| \
-                                pd.isna(alldf[last_col_src]))]
+        source_mask = ~(
+            alldf[dd_col].astype(str).str.contains("cs")
+            | alldf[dd_col].astype(str).str.contains("cr")
+            | pd.isna(alldf[last_col_src])
+        )
+        source_event_ids = alldf.loc[source_mask, last_col_src].astype(str)
+        duplicated_event_ids = source_event_ids[
+            source_event_ids.duplicated(keep=False)
+        ].unique()
+        if duplicated_event_ids.size:
+            raise ValueError(
+                "event_id must be unique; duplicated values: {}".format(
+                    ", ".join(duplicated_event_ids)
+                )
+            )
+
+        # File src_index values are not guaranteed to be unique. Assign each
+        # source block a new consecutive index and propagate it to all records
+        # belonging to that block before parsing the individual record types.
+        block_src_index = pd.Series(np.nan, index=alldf.index)
+        block_src_index.loc[source_mask] = np.arange(source_mask.sum())
+        block_src_index = block_src_index.ffill()
+        if block_src_index.isna().any():
+            raise ValueError(
+                "Receiver data found before the first source record"
+            )
+        alldf.loc[:, 0] = block_src_index.astype(int)
+
+        event_id_to_src_index = dict(zip(
+            source_event_ids,
+            np.arange(source_mask.sum()),
+        ))
+        sr.src_points = alldf[source_mask]
         # add weight column if not included
         if sr.src_points.shape[1] == last_col_src + 1:
             # add another column for weight
@@ -378,6 +422,20 @@ In this case, please set dist_in_data=True and read again."""
             cols, data_type = setup_rec_points_dd(type='cr')
             sr.rec_points_cr.columns = cols
             sr.rec_points_cr = sr.rec_points_cr.astype(data_type)
+            if not sr.rec_points_cr.empty:
+                mapped_src_index2 = sr.rec_points_cr["event_id2"].map(
+                    event_id_to_src_index
+                )
+                if mapped_src_index2.isna().any():
+                    missing_event_ids = sr.rec_points_cr.loc[
+                        mapped_src_index2.isna(), "event_id2"
+                    ].unique()
+                    raise ValueError(
+                        "Unknown event_id2 in common-receiver data: {}".format(
+                            ", ".join(missing_event_ids)
+                        )
+                    )
+                sr.rec_points_cr["src_index2"] = mapped_src_index2.astype(int)
 
             # read common source data
             sr.rec_points_cs = alldf[
@@ -1330,6 +1388,94 @@ In this case, please set dist_in_data=True and read again."""
         )
         return regression_params
 
+    def select_by_constant_velocity(
+        self,
+        velocity,
+        tt_res_range,
+        recalc_dist=False,
+        **kwargs,
+    ):
+        """Select arrivals around a constant-velocity travel-time curve.
+
+        An arrival is retained when its travel-time residual satisfies
+
+        ``tt_res_range[0] <= tt - distance_km / velocity <= tt_res_range[1]``.
+
+        ``dist_deg`` is converted to epicentral arc distance in kilometres
+        using the package Earth radius. The residual bounds are inclusive and
+        may be asymmetric. Non-finite distances or travel times are removed.
+
+        .. note::
+            This criterion only applies to absolute travel-time data in
+            :attr:`rec_points`. A double-difference record is removed when
+            either corresponding absolute arrival is rejected.
+
+        :param velocity: Constant reference velocity in kilometres per second.
+        :type velocity: float
+        :param tt_res_range: Inclusive travel-time residual range in seconds,
+                             ``[min_residual, max_residual]``.
+        :type tt_res_range: list or tuple
+        :param recalc_dist: Recalculate epicentral distance even when
+                           ``dist_deg`` exists, defaults to False.
+        :type recalc_dist: bool
+        """
+        if (
+            not isinstance(velocity, Real)
+            or isinstance(velocity, (bool, np.bool_))
+            or not np.isfinite(velocity)
+            or velocity <= 0
+        ):
+            raise ValueError("velocity must be a positive finite number")
+
+        try:
+            min_residual, max_residual = tt_res_range
+        except (TypeError, ValueError):
+            raise ValueError(
+                "tt_res_range must contain exactly two finite numbers"
+            ) from None
+        if not all(
+            isinstance(value, Real)
+            and not isinstance(value, (bool, np.bool_))
+            and np.isfinite(value)
+            for value in (min_residual, max_residual)
+        ):
+            raise ValueError(
+                "tt_res_range must contain exactly two finite numbers"
+            )
+        if min_residual > max_residual:
+            raise ValueError(
+                "tt_res_range minimum must not exceed its maximum"
+            )
+
+        self.log.SrcReclog.info(
+            "rec_points before constant-velocity selection: {}".format(
+                self.rec_points.shape[0]
+            )
+        )
+        if ("dist_deg" not in self.rec_points) or recalc_dist:
+            self.log.SrcReclog.info("Calculating epicentral distance...")
+            self.calc_distaz()
+
+        distances_deg = self.rec_points["dist_deg"].to_numpy(dtype=float)
+        travel_times = self.rec_points["tt"].to_numpy(dtype=float)
+        distances_km = np.deg2rad(distances_deg) * _EARTH_RADIUS_KM
+        residuals = travel_times - distances_km / velocity
+        keep = (
+            np.isfinite(distances_deg)
+            & np.isfinite(travel_times)
+            & (residuals >= min_residual)
+            & (residuals <= max_residual)
+        )
+
+        self.rec_points = self.rec_points.loc[keep]
+        self._filter_double_difference_by_arrivals()
+        self.update(**kwargs)
+        self.log.SrcReclog.info(
+            "rec_points after constant-velocity selection: {}".format(
+                self.rec_points.shape[0]
+            )
+        )
+
     def select_by_azi_gap(self, max_azi_gap: float, **kwargs):
         """Select sources with azimuthal gap greater and equal than a number
     
@@ -1935,20 +2081,73 @@ In this case, please set dist_in_data=True and read again."""
 
         return sr
 
-    # implemented in vis.py
-    def plot(self, weight=False, fname=None):
-        """Plot source and receivers for preview
+    # implemented in utils/vis.py
+    def plot(self, color_by="depth", fname=None, **kwargs):
+        """Plot sources and receivers with source-depth sections.
 
-        :param weight: Draw colors of weights, defaults to False
-        :type weight: bool, optional
+        :param color_by: Source attribute used for color mapping; either
+                         ``"depth"`` or ``"weight"``, defaults to ``"depth"``
+        :type color_by: str, optional
         :param fname: Path to output file, defaults to None
         :type fname: str, optional
+        :param kwargs: Additional keyword arguments passed to Matplotlib's
+                       ``Axes.scatter`` for source points, such as ``cmap``,
+                       ``s``, ``alpha``, ``marker``, ``vmin`` and ``vmax``
         :return: matplotlib figure
         :rtype: matplotlib.figure.Figure
         """
-        from .vis import plot_srcrec
+        from .utils.vis import plot_src_rec
 
-        return plot_srcrec(self, weight=weight, fname=fname)
+        return plot_src_rec(
+            self, color_by=color_by, fname=fname, **kwargs
+        )
+
+    def plot_travel_time(
+        self,
+        color="tab:blue",
+        fname=None,
+        fig=None,
+        ylim="adaptive",
+        **kwargs,
+    ):
+        """Plot absolute travel time against epicentral distance.
+
+        If ``dist_deg`` is unavailable, it is calculated before plotting.
+        The returned Matplotlib figure remains editable; use
+        ``figure.axes[0]`` to add lines, annotations, or other content.
+
+        :param color: Matplotlib-compatible point color, defaults to
+                      ``"tab:blue"``.
+        :param fname: Path to output file, defaults to None.
+        :type fname: str, optional
+        :param fig: Existing Matplotlib figure on which to draw, defaults to
+                    None. Its current axis is used, or one is created when
+                    necessary.
+        :type fig: matplotlib.figure.Figure, optional
+        :param ylim: Y-axis scaling strategy. Use ``"adaptive"`` to derive
+                     limits from travel times at the minimum and maximum
+                     epicentral distances, ``"auto"`` for Matplotlib
+                     autoscaling, ``"inherit"`` to preserve the limits of an
+                     existing figure, or pass ``(min, max)`` explicitly.
+        :param kwargs: Additional keyword arguments passed to Matplotlib's
+                       ``Axes.scatter``.
+        :return: Matplotlib figure.
+        :rtype: matplotlib.figure.Figure
+        """
+        if "dist_deg" not in self.rec_points:
+            self.log.SrcReclog.info("Calculating epicentral distance...")
+            self.calc_distaz()
+
+        from .utils.vis import plot_travel_time
+
+        return plot_travel_time(
+            self,
+            color=color,
+            fname=fname,
+            fig=fig,
+            ylim=ylim,
+            **kwargs,
+        )
 
 
 if __name__ == "__main__":
