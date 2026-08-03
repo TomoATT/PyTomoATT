@@ -2121,9 +2121,10 @@ In this case, please set dist_in_data=True and read again."""
             weights = rec_data['weight'].values
             for i in range(rec_data.shape[0]):
                 for j in range(i + 1, rec_data.shape[0]):
-                    if abs(baz_values[i] - baz_values[j]) < max_azi_gap and \
-                       abs(dist_deg_values[i] - dist_deg_values[j]) < max_dist_gap and \
-                       phases[i] == phases[j]:
+                    baz_dif = abs(baz_values[i] - baz_values[j])
+                    if ((baz_dif < max_azi_gap) or (360 - baz_dif < max_azi_gap)) and \
+                        abs(dist_deg_values[i] - dist_deg_values[j]) < max_dist_gap and \
+                        phases[i] == phases[j]:
                         data_row = {
                             "src_index": idx,
                             "rec_index1": rec_indices[i],
@@ -2175,7 +2176,8 @@ In this case, please set dist_in_data=True and read again."""
             for i in range(rec_data.shape[0]):
                 for j in range(i + 1, rec_data.shape[0]):
                     src_index = src_indices[j]
-                    if abs(baz_values[i] - baz_values[j]) < max_azi_gap and \
+                    baz_dif = abs(baz_values[i] - baz_values[j])
+                    if ((baz_dif < max_azi_gap) or (360 - baz_dif < max_azi_gap)) and \
                        abs(dist_deg_values[i] - dist_deg_values[j]) < max_dist_gap and \
                        rec_phases[i] == rec_phases[j]:
                         data_row = {
