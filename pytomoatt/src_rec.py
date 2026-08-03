@@ -540,7 +540,7 @@ In this case, please set dist_in_data=True and read again."""
                     weight,
                 ) = row
                 rec_cs_lines_by_src.setdefault(src_index, []).append(
-                    "%7d %7d %6s %9.4f %9.4f %9.4f %7d %6s %9.4f %9.4f %9.4f %s %8.4f %7.3f\n" % (
+                    "%8d %7d %6s %9.4f %9.4f %9.4f %7d %6s %9.4f %9.4f %9.4f %s %8.4f %7.3f\n" % (
                         src_index_map[src_index],
                         *row[1:],
                     )
@@ -572,7 +572,7 @@ In this case, please set dist_in_data=True and read again."""
                 output_src_index = src_index_map[src_index]
                 output_src_index2 = src_index_map[row[6]]
                 rec_cr_lines_by_src.setdefault(src_index, []).append(
-                    "%7d %7d %6s %9.4f %9.4f %9.4f %7d %6s %9.4f %9.4f %9.4f %s %8.4f %7.3f\n" % (
+                    "%8d %7d %6s %9.4f %9.4f %9.4f %7d %6s %9.4f %9.4f %9.4f %s %8.4f %7.3f\n" % (
                         output_src_index,
                         *row[1:6],
                         output_src_index2,
@@ -616,7 +616,7 @@ In this case, please set dist_in_data=True and read again."""
                 origin_time.strftime("%Y_%m_%d_%H_%M_%S.%f").split("_")
             )
             output.write(
-                f"{output_idx:d} {time_fields} {evla:.4f} {evlo:.4f} "
+                f"{output_idx:8d} {time_fields} {evla:.4f} {evlo:.4f} "
                 f"{evdp:.4f} {mag:.4f} {num_rec} {event_id} "
                 f"{weight:.4f}\n"
             )
