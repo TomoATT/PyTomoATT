@@ -476,82 +476,130 @@ In this case, please set dist_in_data=True and read again."""
         rec_points_cs = self.rec_points_cs
         rec_points_cr = self.rec_points_cr
 
+        # Pre-format receiver records by source so the source loop only
+        # performs dictionary lookups and writes complete string blocks.
+        rec_lines_by_src = {}
+        for row in zip(
+            rec_points["src_index"].to_numpy(),
+            rec_points["rec_index"].to_numpy(),
+            rec_points["staname"].to_numpy(),
+            rec_points["stla"].to_numpy(),
+            rec_points["stlo"].to_numpy(),
+            rec_points["stel"].to_numpy(),
+            rec_points["phase"].to_numpy(),
+            rec_points["tt"].to_numpy(),
+            rec_points["weight"].to_numpy(),
+        ):
+            src_index, rec_index, staname, stla, stlo, stel, phase, tt, weight = row
+            rec_lines_by_src.setdefault(src_index, []).append(
+                "   {:d} {:d} {} {:6.4f} {:6.4f} {:6.4f} {} {:6.4f} {:6.4f}\n".format(
+                    src_index,
+                    rec_index,
+                    staname,
+                    stla,
+                    stlo,
+                    stel,
+                    phase,
+                    tt,
+                    weight,
+                )
+            )
+        rec_lines_by_src = {
+            src_index: "".join(lines)
+            for src_index, lines in rec_lines_by_src.items()
+        }
+
+        rec_cs_lines_by_src = {}
+        if not rec_points_cs.empty:
+            for row in zip(
+                rec_points_cs["src_index"].to_numpy(),
+                rec_points_cs["rec_index1"].to_numpy(),
+                rec_points_cs["staname1"].to_numpy(),
+                rec_points_cs["stla1"].to_numpy(),
+                rec_points_cs["stlo1"].to_numpy(),
+                rec_points_cs["stel1"].to_numpy(),
+                rec_points_cs["rec_index2"].to_numpy(),
+                rec_points_cs["staname2"].to_numpy(),
+                rec_points_cs["stla2"].to_numpy(),
+                rec_points_cs["stlo2"].to_numpy(),
+                rec_points_cs["stel2"].to_numpy(),
+                rec_points_cs["phase"].to_numpy(),
+                rec_points_cs["tt"].to_numpy(),
+                rec_points_cs["weight"].to_numpy(),
+            ):
+                src_index = row[0]
+                rec_cs_lines_by_src.setdefault(src_index, []).append(
+                    "   {:d} {:d} {} {:6.4f} {:6.4f} {:6.4f} {:d} {} {:6.4f} {:6.4f} {:6.4f} {} {:.4f} {:6.4f}\n".format(
+                        *row
+                    )
+                )
+            rec_cs_lines_by_src = {
+                src_index: "".join(lines)
+                for src_index, lines in rec_cs_lines_by_src.items()
+            }
+
+        rec_cr_lines_by_src = {}
+        if not rec_points_cr.empty:
+            for row in zip(
+                rec_points_cr["src_index"].to_numpy(),
+                rec_points_cr["rec_index"].to_numpy(),
+                rec_points_cr["staname"].to_numpy(),
+                rec_points_cr["stla"].to_numpy(),
+                rec_points_cr["stlo"].to_numpy(),
+                rec_points_cr["stel"].to_numpy(),
+                rec_points_cr["src_index2"].to_numpy(),
+                rec_points_cr["event_id2"].to_numpy(),
+                rec_points_cr["evla2"].to_numpy(),
+                rec_points_cr["evlo2"].to_numpy(),
+                rec_points_cr["evdp2"].to_numpy(),
+                rec_points_cr["phase"].to_numpy(),
+                rec_points_cr["tt"].to_numpy(),
+                rec_points_cr["weight"].to_numpy(),
+            ):
+                src_index = row[0]
+                rec_cr_lines_by_src.setdefault(src_index, []).append(
+                    "   {:d} {:d} {} {:6.4f} {:6.4f} {:6.4f} {:d} {} {:6.4f} {:6.4f} {:6.4f} {} {:.4f} {:6.4f}\n".format(
+                        *row
+                    )
+                )
+            rec_cr_lines_by_src = {
+                src_index: "".join(lines)
+                for src_index, lines in rec_cr_lines_by_src.items()
+            }
+
         for src in tqdm.tqdm(
-            src_points.itertuples(),
+            src_points.itertuples(name=None),
             total=src_points.shape[0],
             desc="Writing src_rec file",
         ):
-            idx = src.Index
-            time_lst = (
-                src.origin_time.strftime("%Y_%m_%d_%H_%M_%S.%f").split("_")
-            )
+            idx = src[0]
+            origin_time = src[1]
+            evla = src[2]
+            evlo = src[3]
+            evdp = src[4]
+            mag = src[5]
+            num_rec = src[6]
+            event_id = src[7]
+            weight = src[8]
+            time_lst = origin_time.strftime("%Y_%m_%d_%H_%M_%S.%f").split("_")
             output.write("{:d} {} {} {} {} {} {} {:.4f} {:.4f} {:.4f} {:.4f} {} {} {:.4f}\n".format(
                     idx,
                     *time_lst,
-                    src.evla,
-                    src.evlo,
-                    src.evdp,
-                    src.mag,
-                    src.num_rec,
-                    src.event_id,
-                    src.weight,
+                    evla,
+                    evlo,
+                    evdp,
+                    mag,
+                    num_rec,
+                    event_id,
+                    weight,
                 ))
 
             if self.src_only:
                 continue
 
-            rec_data = rec_points[rec_points["src_index"] == idx]
-            for rec in rec_data.itertuples():
-                output.write("   {:d} {:d} {} {:6.4f} {:6.4f} {:6.4f} {} {:6.4f} {:6.4f}\n".format(
-                        idx,
-                        rec.rec_index,
-                        rec.staname,
-                        rec.stla,
-                        rec.stlo,
-                        rec.stel,
-                        rec.phase,
-                        rec.tt,
-                        rec.weight,
-                    ))
-
-            if not rec_points_cs.empty:
-                rec_data = rec_points_cs[rec_points_cs["src_index"] == idx]
-                for rec in rec_data.itertuples():
-                    output.write("   {:d} {:d} {} {:6.4f} {:6.4f} {:6.4f} {:d} {} {:6.4f} {:6.4f} {:6.4f} {} {:.4f} {:6.4f}\n".format(
-                            idx,
-                            rec.rec_index1,
-                            rec.staname1,
-                            rec.stla1,
-                            rec.stlo1,
-                            rec.stel1,
-                            rec.rec_index2,
-                            rec.staname2,
-                            rec.stla2,
-                            rec.stlo2,
-                            rec.stel2,
-                            rec.phase,
-                            rec.tt,
-                            rec.weight,
-                        ))
-            if not rec_points_cr.empty:
-                rec_data = rec_points_cr[rec_points_cr["src_index"] == idx]
-                for rec in rec_data.itertuples():
-                    output.write("   {:d} {:d} {} {:6.4f} {:6.4f} {:6.4f} {:d} {} {:6.4f} {:6.4f} {:6.4f} {} {:.4f} {:6.4f}\n".format(
-                            idx,
-                            rec.rec_index,
-                            rec.staname,
-                            rec.stla,
-                            rec.stlo,
-                            rec.stel,
-                            rec.src_index2,
-                            rec.event_id2,
-                            rec.evla2,
-                            rec.evlo2,
-                            rec.evdp2,
-                            rec.phase,
-                            rec.tt,
-                            rec.weight,
-                        ))
+            output.write(rec_lines_by_src.get(idx, ""))
+            output.write(rec_cs_lines_by_src.get(idx, ""))
+            output.write(rec_cr_lines_by_src.get(idx, ""))
         with open(fname, "w") as f:
             f.write(output.getvalue())
 
