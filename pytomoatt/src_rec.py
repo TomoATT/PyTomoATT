@@ -3,7 +3,6 @@ import tqdm
 import pandas as pd
 from .distaz import DistAZ
 from .setuplog import SetupLog
-from .utils import _EARTH_RADIUS_KM
 from .utils.src_rec_utils import define_rec_cols, setup_rec_points_dd, \
                                  get_rec_points_types, update_position, \
                                  linear_regression as fit_linear_regression
@@ -1668,11 +1667,12 @@ In this case, please set dist_in_data=True and read again."""
 
         An arrival is retained when its travel-time residual satisfies
 
-        ``tt_res_range[0] <= tt - distance_km / velocity <= tt_res_range[1]``.
+        ``tt_res_range[0] <= tt - dist_3d_km / velocity <= tt_res_range[1]``.
 
-        ``dist_deg`` is converted to epicentral arc distance in kilometres
-        using the package Earth radius. The residual bounds are inclusive and
-        may be asymmetric. Non-finite distances or travel times are removed.
+        ``dist_3d_km`` is the source--receiver distance calculated by
+        :meth:`calc_distaz` from epicentral distance, source depth, and station
+        elevation. The residual bounds are inclusive and may be asymmetric.
+        Non-finite distances or travel times are removed.
 
         .. note::
             This criterion only applies to absolute travel-time data in
@@ -1684,8 +1684,8 @@ In this case, please set dist_in_data=True and read again."""
         :param tt_res_range: Inclusive travel-time residual range in seconds,
                              ``[min_residual, max_residual]``.
         :type tt_res_range: list or tuple
-        :param recalc_dist: Recalculate epicentral distance even when
-                           ``dist_deg`` exists, defaults to False.
+        :param recalc_dist: Recalculate source--receiver distance even when
+                            ``dist_3d_km`` exists, defaults to False.
         :type recalc_dist: bool
         """
         if (
@@ -1726,19 +1726,18 @@ In this case, please set dist_in_data=True and read again."""
                 self.rec_points.shape[0]
             )
         )
-        if ("dist_deg" not in self.rec_points) or recalc_dist:
-            self.log.SrcReclog.info("Calculating epicentral distance...")
+        if ("dist_3d_km" not in self.rec_points) or recalc_dist:
+            self.log.SrcReclog.info("Calculating source--receiver distance...")
             self.calc_distaz()
 
-        distances_deg = self.rec_points["dist_deg"].to_numpy(dtype=float)
+        distances_km = self.rec_points["dist_3d_km"].to_numpy(dtype=float)
         travel_times = self.rec_points["tt"].to_numpy(dtype=float)
-        distances_km = np.deg2rad(distances_deg) * _EARTH_RADIUS_KM
         residuals = travel_times - distances_km / velocity
         keep = (
-            np.isfinite(distances_deg)
+            np.isfinite(distances_km)
             & np.isfinite(travel_times)
-            & (residuals >= min_residual)
-            & (residuals <= max_residual)
+            & (residuals > min_residual)
+            & (residuals < max_residual)
         )
 
         self.rec_points = self.rec_points.loc[keep]

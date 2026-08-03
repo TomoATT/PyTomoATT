@@ -487,12 +487,20 @@ class TestSrcRec(unittest.TestCase):
 
     def test_select_by_constant_velocity(self):
         sr = SrcRec('unused')
-        distance = np.array([0.0, 1.0, 2.0, 3.0, 0.0])
-        reference_tt = np.deg2rad(distance) * 6371.0 / 10.0
+        distance_3d_km = np.array([1.0, 111.2, 222.4, 333.6, 2.0])
+        sr.src_points = pd.DataFrame(
+            {
+                'evdp': [10.0, 20.0],
+                'event_id': ['EVT0', 'EVT1'],
+            },
+            index=pd.Index([0, 1], name='src_index'),
+        )
+        reference_tt = distance_3d_km / 10.0
         sr.rec_points = pd.DataFrame({
             'src_index': [0, 0, 0, 0, 1],
             'staname': ['STA0', 'STA1', 'STA2', 'STA3', 'STA0'],
-            'dist_deg': distance,
+            'stel': [-9000.0, -9000.0, -9000.0, -9000.0, -18000.0],
+            'dist_3d_km': distance_3d_km,
             'tt': reference_tt + np.array([-1.0, 0.0, 2.0, 2.1, 0.0]),
             'phase': ['P'] * 5,
         })
