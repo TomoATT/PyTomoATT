@@ -523,7 +523,22 @@ In this case, please set dist_in_data=True and read again."""
                 rec_points_cs["tt"].to_numpy(),
                 rec_points_cs["weight"].to_numpy(),
             ):
-                src_index = row[0]
+                (
+                    src_index,
+                    rec_index1,
+                    staname1,
+                    stla1,
+                    stlo1,
+                    stel1,
+                    rec_index2,
+                    staname2,
+                    stla2,
+                    stlo2,
+                    stel2,
+                    phase,
+                    tt,
+                    weight,
+                ) = row
                 rec_cs_lines_by_src.setdefault(src_index, []).append(
                     "%7d %7d %6s %9.4f %9.4f %9.4f %7d %6s %9.4f %9.4f %9.4f %s %8.4f %7.3f\n" % (
                         src_index_map[src_index],
@@ -569,42 +584,42 @@ In this case, please set dist_in_data=True and read again."""
                 for src_index, lines in rec_cr_lines_by_src.items()
             }
 
-        for src in tqdm.tqdm(
-            src_points.itertuples(name=None),
+        source_columns = [
+            "origin_time",
+            "evla",
+            "evlo",
+            "evdp",
+            "mag",
+            "num_rec",
+            "event_id",
+            "weight",
+        ]
+        source_rows = src_points[source_columns].itertuples(name=None)
+        for row in tqdm.tqdm(
+            source_rows,
             total=src_points.shape[0],
             desc="Writing src_rec file",
         ):
-            idx = src[0]
+            (
+                idx,
+                origin_time,
+                evla,
+                evlo,
+                evdp,
+                mag,
+                num_rec,
+                event_id,
+                weight,
+            ) = row
             output_idx = src_index_map[idx]
-            origin_time = src[1]
-            evla = src[2]
-            evlo = src[3]
-            evdp = src[4]
-            mag = src[5]
-            num_rec = src[6]
-            event_id = src[7]
-            weight = src[8]
-            second = (
-                origin_time.second
-                + origin_time.microsecond * 1e-6
-                + origin_time.nanosecond * 1e-9
+            time_fields = " ".join(
+                origin_time.strftime("%Y_%m_%d_%H_%M_%S.%f").split("_")
             )
-            output.write("%7d %6d %2d %2d %2d %2d %5.2f %9.4f %9.4f %9.4f %5.2f %7d %s %7.3f\n" % (
-                    output_idx,
-                    origin_time.year,
-                    origin_time.month,
-                    origin_time.day,
-                    origin_time.hour,
-                    origin_time.minute,
-                    second,
-                    evla,
-                    evlo,
-                    evdp,
-                    mag,
-                    num_rec,
-                    event_id,
-                    weight,
-                ))
+            output.write(
+                f"{output_idx:d} {time_fields} {evla:.4f} {evlo:.4f} "
+                f"{evdp:.4f} {mag:.4f} {num_rec} {event_id} "
+                f"{weight:.4f}\n"
+            )
 
             if self.src_only:
                 continue
