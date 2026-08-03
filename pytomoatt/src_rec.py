@@ -492,7 +492,7 @@ In this case, please set dist_in_data=True and read again."""
         ):
             src_index, rec_index, staname, stla, stlo, stel, phase, tt, weight = row
             rec_lines_by_src.setdefault(src_index, []).append(
-                "%7d %7d %6s %9.4f %9.4f %9.4f %s %8.4f %7.3f\n" % (
+                "%7d %7d %6s %9.4f %9.4f %9.4f %s %8.4f %7.4f\n" % (
                     src_index,
                     rec_index,
                     staname,
@@ -529,7 +529,7 @@ In this case, please set dist_in_data=True and read again."""
             ):
                 src_index = row[0]
                 rec_cs_lines_by_src.setdefault(src_index, []).append(
-                    "%7d %7d %6s %9.4f %9.4f %9.4f %7d %6s %9.4f %9.4f %9.4f %s %8.4f %7.3f\n" % row
+                    "%7d %7d %6s %9.4f %9.4f %9.4f %7d %6s %9.4f %9.4f %9.4f %s %8.4f %7.4f\n" % row
                 )
             rec_cs_lines_by_src = {
                 src_index: "".join(lines)
@@ -556,40 +556,23 @@ In this case, please set dist_in_data=True and read again."""
             ):
                 src_index = row[0]
                 rec_cr_lines_by_src.setdefault(src_index, []).append(
-                    "%7d %7d %6s %9.4f %9.4f %9.4f %7d %6s %9.4f %9.4f %9.4f %s %8.4f %7.3f\n" % row
+                    "%7d %7d %6s %9.4f %9.4f %9.4f %7d %6s %9.4f %9.4f %9.4f %s %8.4f %7.4f\n" % row
                 )
             rec_cr_lines_by_src = {
                 src_index: "".join(lines)
                 for src_index, lines in rec_cr_lines_by_src.items()
             }
 
-        for src in tqdm.tqdm(
-            src_points.itertuples(name=None),
+        _src_cols = ["origin_time", "evla", "evlo", "evdp", "mag", "num_rec", "event_id", "weight"]
+        for idx, origin_time, evla, evlo, evdp, mag, num_rec, event_id, weight in tqdm.tqdm(
+            src_points[_src_cols].itertuples(name=None),
             total=src_points.shape[0],
             desc="Writing src_rec file",
         ):
-            idx = src[0]
-            origin_time = src[1]
-            evla = src[2]
-            evlo = src[3]
-            evdp = src[4]
-            mag = src[5]
-            num_rec = src[6]
-            event_id = src[7]
-            weight = src[8]
-            second = (
-                origin_time.second
-                + origin_time.microsecond * 1e-6
-                + origin_time.nanosecond * 1e-9
-            )
-            output.write("%7d %6d %2d %2d %2d %2d %5.2f %9.4f %9.4f %9.4f %5.2f %7d %s %7.3f\n" % (
+            time_lst = origin_time.strftime("%Y_%m_%d_%H_%M_%S.%f").split("_")
+            output.write("{:d} {} {} {} {} {} {} {:.4f} {:.4f} {:.4f} {:.4f} {} {} {:.4f}\n".format(
                     idx,
-                    origin_time.year,
-                    origin_time.month,
-                    origin_time.day,
-                    origin_time.hour,
-                    origin_time.minute,
-                    second,
+                    *time_lst,
                     evla,
                     evlo,
                     evdp,
