@@ -2123,8 +2123,8 @@ In this case, please set dist_in_data=True and read again."""
                 for j in range(i + 1, rec_data.shape[0]):
                     baz_dif = abs(baz_values[i] - baz_values[j])
                     if ((baz_dif < max_azi_gap) or (360 - baz_dif < max_azi_gap)) and \
-                        abs(dist_deg_values[i] - dist_deg_values[j]) < max_dist_gap and \
-                        phases[i] == phases[j]:
+                        abs(dist_deg_values[i] - dist_deg_values[j]) < max_dist_gap:
+                        # phases[i] == phases[j]: 
                         data_row = {
                             "src_index": idx,
                             "rec_index1": rec_indices[i],
@@ -2178,8 +2178,8 @@ In this case, please set dist_in_data=True and read again."""
                     src_index = src_indices[j]
                     baz_dif = abs(baz_values[i] - baz_values[j])
                     if ((baz_dif < max_azi_gap) or (360 - baz_dif < max_azi_gap)) and \
-                       abs(dist_deg_values[i] - dist_deg_values[j]) < max_dist_gap and \
-                       rec_phases[i] == rec_phases[j]:
+                       abs(dist_deg_values[i] - dist_deg_values[j]) < max_dist_gap:
+                    #    rec_phases[i] == rec_phases[j]:
                         data_row = {
                             "src_index": src_indices[i],
                             "rec_index": rec_indices[i],
