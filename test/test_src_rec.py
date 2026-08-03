@@ -625,7 +625,66 @@ class TestSrcRec(unittest.TestCase):
         self.assertEqual(sr.sources.loc[0, "weight"], 1.0 / 3.0)
         self.assertEqual(sr.receivers.loc[0, "weight"], 2.0 / 3.0)
 
-    def test_plot_source_only(self):
+    def test_write_roundtrip_preserves_microsecond_and_weight_precision(self):
+        """Write→read roundtrip preserves microsecond origin time and 4-decimal weight precision."""
+        sr = SrcRec("unused")
+
+        origin_time_with_us = pd.Timestamp("2013-10-06 09:20:53.123456")
+        src_weight = 1.0 / 3.0  # 0.3333...
+        rec_weight = 2.0 / 3.0  # 0.6666...
+
+        src_df = pd.DataFrame({
+            "origin_time": [origin_time_with_us],
+            "evla": [-1.7673],
+            "evlo": [-0.6619],
+            "evdp": [9.55],
+            "mag": [2.66],
+            "num_rec": [1],
+            "event_id": ["EVT_0001"],
+            "weight": [src_weight],
+        })
+        src_df.index = pd.Index([0], name="src_index")
+        sr.src_points = src_df
+
+        rec_df = pd.DataFrame({
+            "src_index": [0],
+            "rec_index": [0],
+            "staname": ["STA0"],
+            "stla": [-1.0351],
+            "stlo": [-0.3383],
+            "stel": [219.0],
+            "phase": ["P"],
+            "tt": [14.786],
+            "weight": [rec_weight],
+        })
+        sr.rec_points = rec_df
+
+        with TemporaryDirectory() as directory:
+            output_file = join(directory, "src_rec.dat")
+            sr.write(output_file)
+            reread = SrcRec.read(output_file)
+
+        # Verify microsecond precision is preserved in origin time
+        self.assertEqual(
+            reread.src_points["origin_time"].iloc[0],
+            origin_time_with_us,
+        )
+
+        # Verify source weight is preserved to 4 decimal places
+        self.assertAlmostEqual(
+            reread.src_points["weight"].iloc[0],
+            src_weight,
+            places=4,
+        )
+
+        # Verify receiver weight is preserved to 4 decimal places
+        self.assertAlmostEqual(
+            reread.rec_points["weight"].iloc[0],
+            rec_weight,
+            places=4,
+        )
+
+
         sr = SrcRec.read(self.fname, src_only=True)
 
         figure = sr.plot(color_by="weight")
