@@ -487,13 +487,15 @@ class TestSrcRec(unittest.TestCase):
 
     def test_select_by_constant_velocity(self):
         sr = SrcRec('unused')
-        distance = np.array([0.0, 1.0, 2.0, 3.0, 0.0])
-        reference_tt = np.deg2rad(distance) * 6371.0 / 10.0
+        distance_deg = np.array([0.0, 1.0, 2.0, 3.0, 0.0])
+        distance_km = np.deg2rad(distance_deg) * 6371.0
+        reference_tt = distance_km / 10.0
         sr.rec_points = pd.DataFrame({
             'src_index': [0, 0, 0, 0, 1],
             'staname': ['STA0', 'STA1', 'STA2', 'STA3', 'STA0'],
-            'dist_deg': distance,
-            'tt': reference_tt + np.array([-1.0, 0.0, 2.0, 2.1, 0.0]),
+            'dist_deg': distance_deg,
+            'dist_km': distance_km,
+            'tt': reference_tt + np.array([-0.9, 0.0, 1.9, 2.1, 0.0]),
             'phase': ['P'] * 5,
         })
         sr.rec_points_cs = pd.DataFrame({
@@ -528,6 +530,41 @@ class TestSrcRec(unittest.TestCase):
             sr.select_by_constant_velocity(0.0, (-1.0, 1.0))
         with self.assertRaisesRegex(ValueError, 'tt_res_range'):
             sr.select_by_constant_velocity(1.0, (2.0, 1.0))
+        for distance in ('dist_deg', 'invalid', None, ['dist_km']):
+            with self.subTest(distance=distance):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "distance must be either 'dist_km' or 'dist_3d_km'",
+                ):
+                    sr.select_by_constant_velocity(
+                        1.0,
+                        (-1.0, 1.0),
+                        distance=distance,
+                    )
+
+    def test_select_by_constant_velocity_accepts_3d_distance(self):
+        sr = SrcRec('unused')
+        sr.rec_points = pd.DataFrame({
+            'src_index': [0],
+            'staname': ['STA0'],
+            'dist_3d_km': [10.0],
+            'tt': [2.0],
+            'phase': ['P'],
+        })
+
+        with (
+            patch.object(sr, 'calc_distaz') as calc_distaz,
+            patch.object(sr, 'update') as update,
+        ):
+            sr.select_by_constant_velocity(
+                velocity=10.0,
+                tt_res_range=(0.0, 2.0),
+                distance='dist_3d_km',
+            )
+
+        self.assertEqual(sr.rec_points.shape[0], 1)
+        calc_distaz.assert_not_called()
+        update.assert_called_once_with()
 
     def test_plot(self):
         sr = SrcRec.read(self.fname)
