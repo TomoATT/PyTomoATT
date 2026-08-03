@@ -490,18 +490,22 @@ In this case, please set dist_in_data=True and read again."""
             rec_points["tt"].to_numpy(),
             rec_points["weight"].to_numpy(),
         ):
-            src_index, rec_index, staname, stla, stlo, stel, phase, tt, weight = row
+            (
+                src_index,
+                rec_index,
+                staname,
+                stla,
+                stlo,
+                stel,
+                phase,
+                tt,
+                weight,
+            ) = row
             rec_lines_by_src.setdefault(src_index, []).append(
-                "%7d %7d %6s %9.4f %9.4f %9.4f %s %8.4f %7.4f\n" % (
-                    src_index,
-                    rec_index,
-                    staname,
-                    stla,
-                    stlo,
-                    stel,
-                    phase,
-                    tt,
-                    weight,
+                (
+                    f"{src_index:7d} {rec_index:7d} {staname!s:>6} "
+                    f"{stla:9.4f} {stlo:9.4f} {stel:9.4f} "
+                    f"{phase!s} {tt:8.4f} {weight:7.4f}\n"
                 )
             )
         rec_lines_by_src = {
@@ -527,9 +531,30 @@ In this case, please set dist_in_data=True and read again."""
                 rec_points_cs["tt"].to_numpy(),
                 rec_points_cs["weight"].to_numpy(),
             ):
-                src_index = row[0]
+                (
+                    src_index,
+                    rec_index1,
+                    staname1,
+                    stla1,
+                    stlo1,
+                    stel1,
+                    rec_index2,
+                    staname2,
+                    stla2,
+                    stlo2,
+                    stel2,
+                    phase,
+                    tt,
+                    weight,
+                ) = row
                 rec_cs_lines_by_src.setdefault(src_index, []).append(
-                    "%7d %7d %6s %9.4f %9.4f %9.4f %7d %6s %9.4f %9.4f %9.4f %s %8.4f %7.4f\n" % row
+                    (
+                        f"{src_index:7d} {rec_index1:7d} "
+                        f"{staname1!s:>6} {stla1:9.4f} {stlo1:9.4f} "
+                        f"{stel1:9.4f} {rec_index2:7d} {staname2!s:>6} "
+                        f"{stla2:9.4f} {stlo2:9.4f} {stel2:9.4f} "
+                        f"{phase!s} {tt:8.4f} {weight:7.4f}\n"
+                    )
                 )
             rec_cs_lines_by_src = {
                 src_index: "".join(lines)
@@ -554,33 +579,71 @@ In this case, please set dist_in_data=True and read again."""
                 rec_points_cr["tt"].to_numpy(),
                 rec_points_cr["weight"].to_numpy(),
             ):
-                src_index = row[0]
+                (
+                    src_index,
+                    rec_index,
+                    staname,
+                    stla,
+                    stlo,
+                    stel,
+                    src_index2,
+                    event_id2,
+                    evla2,
+                    evlo2,
+                    evdp2,
+                    phase,
+                    tt,
+                    weight,
+                ) = row
                 rec_cr_lines_by_src.setdefault(src_index, []).append(
-                    "%7d %7d %6s %9.4f %9.4f %9.4f %7d %6s %9.4f %9.4f %9.4f %s %8.4f %7.4f\n" % row
+                    (
+                        f"{src_index:7d} {rec_index:7d} {staname!s:>6} "
+                        f"{stla:9.4f} {stlo:9.4f} {stel:9.4f} "
+                        f"{src_index2:7d} {event_id2!s:>6} "
+                        f"{evla2:9.4f} {evlo2:9.4f} {evdp2:9.4f} "
+                        f"{phase!s} {tt:8.4f} {weight:7.4f}\n"
+                    )
                 )
             rec_cr_lines_by_src = {
                 src_index: "".join(lines)
                 for src_index, lines in rec_cr_lines_by_src.items()
             }
 
-        _src_cols = ["origin_time", "evla", "evlo", "evdp", "mag", "num_rec", "event_id", "weight"]
-        for idx, origin_time, evla, evlo, evdp, mag, num_rec, event_id, weight in tqdm.tqdm(
-            src_points[_src_cols].itertuples(name=None),
+        source_columns = [
+            "origin_time",
+            "evla",
+            "evlo",
+            "evdp",
+            "mag",
+            "num_rec",
+            "event_id",
+            "weight",
+        ]
+        source_rows = src_points[source_columns].itertuples(name=None)
+        for row in tqdm.tqdm(
+            source_rows,
             total=src_points.shape[0],
             desc="Writing src_rec file",
         ):
-            time_lst = origin_time.strftime("%Y_%m_%d_%H_%M_%S.%f").split("_")
-            output.write("{:d} {} {} {} {} {} {} {:.4f} {:.4f} {:.4f} {:.4f} {} {} {:.4f}\n".format(
-                    idx,
-                    *time_lst,
-                    evla,
-                    evlo,
-                    evdp,
-                    mag,
-                    num_rec,
-                    event_id,
-                    weight,
-                ))
+            (
+                idx,
+                origin_time,
+                evla,
+                evlo,
+                evdp,
+                mag,
+                num_rec,
+                event_id,
+                weight,
+            ) = row
+            time_fields = " ".join(
+                origin_time.strftime("%Y_%m_%d_%H_%M_%S.%f").split("_")
+            )
+            output.write(
+                f"{idx:d} {time_fields} {evla:.4f} {evlo:.4f} "
+                f"{evdp:.4f} {mag:.4f} {num_rec} {event_id} "
+                f"{weight:.4f}\n"
+            )
 
             if self.src_only:
                 continue
