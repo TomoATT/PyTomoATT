@@ -2064,7 +2064,8 @@ In this case, please set dist_in_data=True and read again."""
         ].transform("max")
 
     def generate_double_difference(self, type='cs', max_azi_gap=15, max_dist_gap=2.5,
-                                    dd_weight='average', recalc_baz=False, **kwargs):
+                                    dd_weight='average', recalc_baz=False,
+                                    same_phase=True, **kwargs):
         """
         Generate double difference data
 
@@ -2077,6 +2078,8 @@ In this case, please set dist_in_data=True and read again."""
         :param dd_weight: Weighting method for double difference, options: ``average``, ``multiply``, defaults to ``average``
         :param recalc_baz: Recalculate azimuth and back azimuth, defaults to ``False``
         :type recalc_baz: bool, optional
+        :param same_phase: Only pair records with the same phase, defaults to ``True``
+        :type same_phase: bool, optional
 
         ``self.rec_points_cr`` or ``self.rec_points_cs`` are generated
         """
@@ -2085,12 +2088,12 @@ In this case, please set dist_in_data=True and read again."""
             self.calc_distaz()
 
         if type == 'cs':
-            self._generate_cs(max_azi_gap, max_dist_gap, dd_weight)
+            self._generate_cs(max_azi_gap, max_dist_gap, dd_weight, same_phase)
         elif type == 'cr':
-            self._generate_cr(max_azi_gap, max_dist_gap, dd_weight)
+            self._generate_cr(max_azi_gap, max_dist_gap, dd_weight, same_phase)
         elif type == 'both':
-            self._generate_cs(max_azi_gap, max_dist_gap, dd_weight)
-            self._generate_cr(max_azi_gap, max_dist_gap, dd_weight)
+            self._generate_cs(max_azi_gap, max_dist_gap, dd_weight, same_phase)
+            self._generate_cr(max_azi_gap, max_dist_gap, dd_weight, same_phase)
         else:
             self.log.SrcReclog.error(
                 "Only 'cs', 'cr' or 'both' are supported for type of double difference"
@@ -2098,7 +2101,8 @@ In this case, please set dist_in_data=True and read again."""
 
         self.update(**kwargs)
 
-    def _generate_cs(self, max_azi_gap, max_dist_gap, dd_weight='average'):
+    def _generate_cs(self, max_azi_gap, max_dist_gap, dd_weight='average',
+                     same_phase=True):
         names, _ = setup_rec_points_dd('cs')
         self.rec_points_cs = pd.DataFrame(columns=names)
         src = self.rec_points.groupby("src_index")
@@ -2121,10 +2125,14 @@ In this case, please set dist_in_data=True and read again."""
             weights = rec_data['weight'].values
             for i in range(rec_data.shape[0]):
                 for j in range(i + 1, rec_data.shape[0]):
-                    baz_dif = abs(baz_values[i] - baz_values[j])
-                    if ((baz_dif < max_azi_gap) or (360 - baz_dif < max_azi_gap)) and \
-                        abs(dist_deg_values[i] - dist_deg_values[j]) < max_dist_gap:
-                        # phases[i] == phases[j]: 
+                    baz_gap = abs(
+                        (baz_values[i] - baz_values[j] + 180) % 360 - 180
+                    )
+                    if (
+                        baz_gap < max_azi_gap
+                        and abs(dist_deg_values[i] - dist_deg_values[j]) < max_dist_gap
+                        and (not same_phase or phases[i] == phases[j])
+                    ):
                         data_row = {
                             "src_index": idx,
                             "rec_index1": rec_indices[i],
@@ -2149,7 +2157,8 @@ In this case, please set dist_in_data=True and read again."""
             "rec_points_cs after generation: {}".format(self.rec_points_cs.shape)
         )
 
-    def _generate_cr(self, max_azi_gap, max_dist_gap, dd_weight='average'):
+    def _generate_cr(self, max_azi_gap, max_dist_gap, dd_weight='average',
+                     same_phase=True):
         names, _ = setup_rec_points_dd('cr')
         self.rec_points_cr = pd.DataFrame(columns=names)
         src_id = self.src_points["event_id"].values
@@ -2176,10 +2185,14 @@ In this case, please set dist_in_data=True and read again."""
             for i in range(rec_data.shape[0]):
                 for j in range(i + 1, rec_data.shape[0]):
                     src_index = src_indices[j]
-                    baz_dif = abs(baz_values[i] - baz_values[j])
-                    if ((baz_dif < max_azi_gap) or (360 - baz_dif < max_azi_gap)) and \
-                       abs(dist_deg_values[i] - dist_deg_values[j]) < max_dist_gap:
-                    #    rec_phases[i] == rec_phases[j]:
+                    baz_gap = abs(
+                        (baz_values[i] - baz_values[j] + 180) % 360 - 180
+                    )
+                    if (
+                        baz_gap < max_azi_gap
+                        and abs(dist_deg_values[i] - dist_deg_values[j]) < max_dist_gap
+                        and (not same_phase or rec_phases[i] == rec_phases[j])
+                    ):
                         data_row = {
                             "src_index": src_indices[i],
                             "rec_index": rec_indices[i],

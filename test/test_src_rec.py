@@ -128,6 +128,66 @@ class TestSrcRec(unittest.TestCase):
         sr.generate_double_difference('cs', max_azi_gap=15, max_dist_gap=1.4)
         sr.generate_double_difference('cr', max_azi_gap=15, max_dist_gap=0.01)
 
+    def test_generate_cs_can_require_same_phase(self):
+        sr = SrcRec('unused')
+        sr.rec_points = pd.DataFrame({
+            'src_index': [0, 0, 0],
+            'rec_index': [0, 1, 2],
+            'staname': ['STA0', 'STA1', 'STA2'],
+            'stla': [0.0, 0.1, 0.2],
+            'stlo': [0.0, 0.1, 0.2],
+            'stel': [0.0, 0.0, 0.0],
+            'phase': ['P', 'P', 'S'],
+            'dist_deg': [1.0, 1.1, 1.2],
+            'baz': [359.0, 1.0, 2.0],
+            'tt': [1.0, 2.0, 3.0],
+            'weight': [1.0, 1.0, 1.0],
+        })
+
+        with patch.object(sr, 'update'):
+            sr.generate_double_difference('cs', same_phase=False)
+            self.assertEqual(sr.rec_points_cs.shape[0], 3)
+
+            sr.generate_double_difference('cs', same_phase=True)
+
+        self.assertEqual(sr.rec_points_cs.shape[0], 1)
+        self.assertEqual(sr.rec_points_cs.iloc[0]['phase'], 'P,cs')
+
+    def test_generate_cr_can_require_same_phase(self):
+        sr = SrcRec('unused')
+        sr.src_points = pd.DataFrame({
+            'event_id': ['EVENT0', 'EVENT1', 'EVENT2'],
+            'evla': [0.0, 0.1, 0.2],
+            'evlo': [0.0, 0.1, 0.2],
+            'evdp': [10.0, 10.0, 10.0],
+            'weight': [1.0, 1.0, 1.0],
+        })
+        sr.receivers = pd.DataFrame({
+            'staname': ['STA0'],
+            'stla': [1.0],
+            'stlo': [1.0],
+            'stel': [0.0],
+        })
+        sr.rec_points = pd.DataFrame({
+            'src_index': [0, 1, 2],
+            'rec_index': [0, 0, 0],
+            'staname': ['STA0', 'STA0', 'STA0'],
+            'phase': ['P', 'P', 'S'],
+            'dist_deg': [1.0, 1.1, 1.2],
+            'baz': [359.0, 1.0, 2.0],
+            'tt': [1.0, 2.0, 3.0],
+            'weight': [1.0, 1.0, 1.0],
+        })
+
+        with patch.object(sr, 'update'):
+            sr.generate_double_difference('cr', same_phase=False)
+            self.assertEqual(sr.rec_points_cr.shape[0], 3)
+
+            sr.generate_double_difference('cr', same_phase=True)
+
+        self.assertEqual(sr.rec_points_cr.shape[0], 1)
+        self.assertEqual(sr.rec_points_cr.iloc[0]['phase'], 'P,cr')
+
     def test_subcase_10(self):
         sr = SrcRec.read(self.fname)
         sr.box_weighting(0.4, 10, obj='both')
