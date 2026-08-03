@@ -23,11 +23,12 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
-    "numpy>=1.19.0",
+    "numpy>=1.26.4",
     "pandas>=1.4.0",
+    "matplotlib",
     "scipy",
     "h5py",
-    "yamlium>=0.3.0",
+    "ruamel.yaml",
     "xarray",
     "tqdm",
     "pyproj",
