@@ -492,7 +492,7 @@ In this case, please set dist_in_data=True and read again."""
         ):
             src_index, rec_index, staname, stla, stlo, stel, phase, tt, weight = row
             rec_lines_by_src.setdefault(src_index, []).append(
-                "   {:d} {:d} {} {:6.4f} {:6.4f} {:6.4f} {} {:6.4f} {:6.4f}\n".format(
+                "%7d %7d %6s %9.4f %9.4f %9.4f %s %8.4f %7.3f\n" % (
                     src_index,
                     rec_index,
                     staname,
@@ -529,9 +529,7 @@ In this case, please set dist_in_data=True and read again."""
             ):
                 src_index = row[0]
                 rec_cs_lines_by_src.setdefault(src_index, []).append(
-                    "   {:d} {:d} {} {:6.4f} {:6.4f} {:6.4f} {:d} {} {:6.4f} {:6.4f} {:6.4f} {} {:.4f} {:6.4f}\n".format(
-                        *row
-                    )
+                    "%7d %7d %6s %9.4f %9.4f %9.4f %7d %6s %9.4f %9.4f %9.4f %s %8.4f %7.3f\n" % row
                 )
             rec_cs_lines_by_src = {
                 src_index: "".join(lines)
@@ -558,9 +556,7 @@ In this case, please set dist_in_data=True and read again."""
             ):
                 src_index = row[0]
                 rec_cr_lines_by_src.setdefault(src_index, []).append(
-                    "   {:d} {:d} {} {:6.4f} {:6.4f} {:6.4f} {:d} {} {:6.4f} {:6.4f} {:6.4f} {} {:.4f} {:6.4f}\n".format(
-                        *row
-                    )
+                    "%7d %7d %6s %9.4f %9.4f %9.4f %7d %6s %9.4f %9.4f %9.4f %s %8.4f %7.3f\n" % row
                 )
             rec_cr_lines_by_src = {
                 src_index: "".join(lines)
@@ -581,10 +577,19 @@ In this case, please set dist_in_data=True and read again."""
             num_rec = src[6]
             event_id = src[7]
             weight = src[8]
-            time_lst = origin_time.strftime("%Y_%m_%d_%H_%M_%S.%f").split("_")
-            output.write("{:d} {} {} {} {} {} {} {:.4f} {:.4f} {:.4f} {:.4f} {} {} {:.4f}\n".format(
+            second = (
+                origin_time.second
+                + origin_time.microsecond * 1e-6
+                + origin_time.nanosecond * 1e-9
+            )
+            output.write("%7d %6d %2d %2d %2d %2d %5.2f %9.4f %9.4f %9.4f %5.2f %7d %s %7.3f\n" % (
                     idx,
-                    *time_lst,
+                    origin_time.year,
+                    origin_time.month,
+                    origin_time.day,
+                    origin_time.hour,
+                    origin_time.minute,
+                    second,
                     evla,
                     evlo,
                     evdp,
