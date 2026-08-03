@@ -474,6 +474,10 @@ In this case, please set dist_in_data=True and read again."""
         rec_points = self.rec_points
         rec_points_cs = self.rec_points_cs
         rec_points_cr = self.rec_points_cr
+        src_index_map = {
+            src_index: output_index
+            for output_index, src_index in enumerate(src_points.index)
+        }
 
         # Pre-format receiver records by source so the source loop only
         # performs dictionary lookups and writes complete string blocks.
@@ -489,18 +493,11 @@ In this case, please set dist_in_data=True and read again."""
             rec_points["tt"].to_numpy(),
             rec_points["weight"].to_numpy(),
         ):
-            src_index, rec_index, staname, stla, stlo, stel, phase, tt, weight = row
+            src_index = row[0]
             rec_lines_by_src.setdefault(src_index, []).append(
                 "%7d %7d %6s %9.4f %9.4f %9.4f %s %8.4f %7.3f\n" % (
-                    src_index,
-                    rec_index,
-                    staname,
-                    stla,
-                    stlo,
-                    stel,
-                    phase,
-                    tt,
-                    weight,
+                    src_index_map[src_index],
+                    *row[1:],
                 )
             )
         rec_lines_by_src = {
@@ -528,7 +525,10 @@ In this case, please set dist_in_data=True and read again."""
             ):
                 src_index = row[0]
                 rec_cs_lines_by_src.setdefault(src_index, []).append(
-                    "%7d %7d %6s %9.4f %9.4f %9.4f %7d %6s %9.4f %9.4f %9.4f %s %8.4f %7.3f\n" % row
+                    "%7d %7d %6s %9.4f %9.4f %9.4f %7d %6s %9.4f %9.4f %9.4f %s %8.4f %7.3f\n" % (
+                        src_index_map[src_index],
+                        *row[1:],
+                    )
                 )
             rec_cs_lines_by_src = {
                 src_index: "".join(lines)
@@ -554,8 +554,15 @@ In this case, please set dist_in_data=True and read again."""
                 rec_points_cr["weight"].to_numpy(),
             ):
                 src_index = row[0]
+                output_src_index = src_index_map[src_index]
+                output_src_index2 = src_index_map[row[6]]
                 rec_cr_lines_by_src.setdefault(src_index, []).append(
-                    "%7d %7d %6s %9.4f %9.4f %9.4f %7d %6s %9.4f %9.4f %9.4f %s %8.4f %7.3f\n" % row
+                    "%7d %7d %6s %9.4f %9.4f %9.4f %7d %6s %9.4f %9.4f %9.4f %s %8.4f %7.3f\n" % (
+                        output_src_index,
+                        *row[1:6],
+                        output_src_index2,
+                        *row[7:],
+                    )
                 )
             rec_cr_lines_by_src = {
                 src_index: "".join(lines)
@@ -568,6 +575,7 @@ In this case, please set dist_in_data=True and read again."""
             desc="Writing src_rec file",
         ):
             idx = src[0]
+            output_idx = src_index_map[idx]
             origin_time = src[1]
             evla = src[2]
             evlo = src[3]
@@ -582,7 +590,7 @@ In this case, please set dist_in_data=True and read again."""
                 + origin_time.nanosecond * 1e-9
             )
             output.write("%7d %6d %2d %2d %2d %2d %5.2f %9.4f %9.4f %9.4f %5.2f %7d %s %7.3f\n" % (
-                    idx,
+                    output_idx,
                     origin_time.year,
                     origin_time.month,
                     origin_time.day,
