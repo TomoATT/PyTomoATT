@@ -24,8 +24,13 @@ class Dataset(xarray.Dataset):
         :type depth: float
         :param field: Field name in ATT model data
         :type field: str
-        :param samp_interval: Sampling interval, defaults to 0
-        :type samp_interval: int, optional
+        :param samp_interval: Sampling interval, defaults to 0. If a positive
+                              integer is provided, the same interval is used
+                              for both x/lon and y/lat directions. If a
+                              two-element sequence ``[Nx, Ny]`` is provided,
+                              ``Nx`` is used for x/lon and ``Ny`` is used for
+                              y/lat.
+        :type samp_interval: int or sequence of int, optional
         :return: xyz data with 3 columns [lon, lat, value]
         :rtype: :class:`numpy.ndarray`
         """
@@ -33,10 +38,28 @@ class Dataset(xarray.Dataset):
             raise ValueError('Error field name of {}'.format(field))
         # resample self of xarray with given interval of ``samp_interval``
 
-        if samp_interval > 0:
-            resampled = self.isel(t=slice(0, None, samp_interval), p=slice(0, None, samp_interval))
+        if isinstance(samp_interval, (list, tuple, np.ndarray)):
+            if len(samp_interval) != 2:
+                raise ValueError(
+                    "samp_interval must be an integer or a two-element "
+                    "sequence [Nx, Ny]"
+                )
+            x_interval, y_interval = map(int, samp_interval)
         else:
+            x_interval = y_interval = int(samp_interval)
+
+        if x_interval > 0 and y_interval > 0:
+            resampled = self.isel(
+                t=slice(0, None, y_interval),
+                p=slice(0, None, x_interval),
+            )
+        elif x_interval == 0 and y_interval == 0:
             resampled = self
+        else:
+            raise ValueError(
+                "samp_interval values must be positive, or 0 to disable "
+                "resampling"
+            )
         idx = np.where(resampled.coords['dep'].values == depth)[0]
         if idx.size > 0:
             offset = 0
