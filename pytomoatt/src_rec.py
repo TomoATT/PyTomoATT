@@ -535,9 +535,9 @@ In this case, please set dist_in_data=True and read again."""
             ) = row
             rec_lines_by_src.setdefault(src_index, []).append(
                 (
-                    f"{src_index:8d} {rec_index:7d} {staname!s:>6} "
+                    f"{src_index:d} {rec_index:d} {staname!s:>6} "
                     f"{stla:9.4f} {stlo:9.4f} {stel:9.4f} "
-                    f"{phase!s:4} {tt:8.4f} {weight:7.4f}\n"
+                    f"{phase!s} {tt:8.4f} {weight:.4f}\n"
                 )
             )
         rec_lines_by_src = {
@@ -581,11 +581,11 @@ In this case, please set dist_in_data=True and read again."""
                 ) = row
                 rec_cs_lines_by_src.setdefault(src_index, []).append(
                     (
-                        f"{src_index:8d} {rec_index1:8d} "
+                        f"{src_index:d} {rec_index1:d} "
                         f"{staname1!s:>6} {stla1:9.4f} {stlo1:9.4f} "
-                        f"{stel1:9.4f} {rec_index2:8d} {staname2!s:>6} "
+                        f"{stel1:9.4f} {rec_index2:d} {staname2!s:>6} "
                         f"{stla2:9.4f} {stlo2:9.4f} {stel2:9.4f} "
-                        f"{phase!s:4} {tt:8.4f} {weight:7.4f}\n"
+                        f"{phase!s} {tt:8.4f} {weight:.4f}\n"
                     )
                 )
             rec_cs_lines_by_src = {
@@ -629,11 +629,11 @@ In this case, please set dist_in_data=True and read again."""
                 ) = row
                 rec_cr_lines_by_src.setdefault(src_index, []).append(
                     (
-                        f"{src_index:8d} {rec_index:8d} {staname!s:>6} "
+                        f"{src_index:d} {rec_index:d} {staname!s:>6} "
                         f"{stla:9.4f} {stlo:9.4f} {stel:9.4f} "
-                        f"{src_index2:8d} {event_id2!s:>6} "
+                        f"{src_index2:d} {event_id2!s:>6} "
                         f"{evla2:9.4f} {evlo2:9.4f} {evdp2:9.4f} "
-                        f"{phase!s:4} {tt:8.4f} {weight:7.4f}\n"
+                        f"{phase!s} {tt:8.4f} {weight:.4f}\n"
                     )
                 )
             rec_cr_lines_by_src = {
@@ -672,7 +672,7 @@ In this case, please set dist_in_data=True and read again."""
                 origin_time.strftime("%Y_%m_%d_%H_%M_%S.%f").split("_")
             )
             output.write(
-                f"{idx:8d} {time_fields} {evla:.4f} {evlo:.4f} "
+                f"{idx:d} {time_fields} {evla:.4f} {evlo:.4f} "
                 f"{evdp:.4f} {mag:.4f} {num_rec} {event_id} "
                 f"{weight:.4f}\n"
             )
@@ -709,6 +709,10 @@ In this case, please set dist_in_data=True and read again."""
         phase_map = {
             "PG": "Pg",
             "PN": "Pn",
+            "PB": "Pb",
+            "SG": "Sg",
+            "SN": "Sn",
+            "SB": "Sb",
         }
         return f"{phase_map.get(base_phase, base_phase)}{suffix}"
 
@@ -1379,7 +1383,6 @@ In this case, please set dist_in_data=True and read again."""
         :param mode: "first" to keep only the first occurrence of duplicate receivers, "mean" to average travel time, defaults to "mean"
         :type mode: str, optional
         """
-        self._normalize_phase_labels()
         self.update_unique_src_rec()
         self.remove_rec_by_new_src()
         self.remove_src_by_new_rec()
@@ -2576,7 +2579,7 @@ In this case, please set dist_in_data=True and read again."""
             baz_values = rec_data['baz'].values
             dist_deg_values = rec_data['dist_deg'].values
             rec_indices = rec_data['rec_index'].values
-            src_indices = rec_data['src_index'].to_numpy(dtype=int)
+            src_indices = rec_data['src_index'].values
             rec_weights = rec_data['weight'].values
             rec_phases = rec_data['phase'].values
             tts = rec_data['tt'].values
