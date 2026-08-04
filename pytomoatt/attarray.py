@@ -144,21 +144,26 @@ class Dataset(xarray.Dataset):
         if input_type == "phy":
             try:
                 central_lat, central_lon, rotation_angle = rotate
-                start_point[1], start_point[0] = rtp_rotation(start_point[1], start_point[0], central_lat, central_lon, rotation_angle)
-                end_point[1], end_point[0] = rtp_rotation(end_point[1], end_point[0], central_lat, central_lon, rotation_angle)
+                new_start_point = np.zeros(2)
+                new_end_point = np.zeros(2)
+                new_start_point[1], new_start_point[0] = rtp_rotation(start_point[1], start_point[0], central_lat, central_lon, rotation_angle)
+                new_end_point[1], new_end_point[0] = rtp_rotation(end_point[1], end_point[0], central_lat, central_lon, rotation_angle)
             except (TypeError, ValueError):
                 raise ValueError(
                     "rotate must be a 3-item sequence: [central_lat, central_lon, rotation_angle]"
                 )
+        else:
+            new_start_point = start_point
+            new_end_point = end_point
         
         # Initialize a profile
         if flat_earth:
-            sec_points, sec_range = interpolation_lola_linear(start_point, end_point, val)
+            sec_points, sec_range = interpolation_lola_linear(new_start_point, new_end_point, val)
         else:
             g = Geod(ellps='WGS84')
-            az, _, dist = g.inv(start_point[0],start_point[1],end_point[0],end_point[1], return_back_azimuth=False)
+            az, _, dist = g.inv(new_start_point[0],new_start_point[1],new_end_point[0],new_end_point[1], return_back_azimuth=False)
             sec_range = np.arange(0, dist/1000, val)
-            r = g.fwd_intermediate(start_point[0],start_point[1], az, npts=sec_range.size, del_s=val*1000)
+            r = g.fwd_intermediate(new_start_point[0],new_start_point[1], az, npts=sec_range.size, del_s=val*1000)
             sec_points = np.array([r.lons, r.lats]).T
 
         # create points array
