@@ -535,9 +535,9 @@ In this case, please set dist_in_data=True and read again."""
             ) = row
             rec_lines_by_src.setdefault(src_index, []).append(
                 (
-                    f"{src_index:7d} {rec_index:7d} {staname!s:>6} "
+                    f"{src_index:8d} {rec_index:7d} {staname!s:>6} "
                     f"{stla:9.4f} {stlo:9.4f} {stel:9.4f} "
-                    f"{phase!s} {tt:8.4f} {weight:7.4f}\n"
+                    f"{phase!s:4} {tt:8.4f} {weight:7.4f}\n"
                 )
             )
         rec_lines_by_src = {
@@ -581,11 +581,11 @@ In this case, please set dist_in_data=True and read again."""
                 ) = row
                 rec_cs_lines_by_src.setdefault(src_index, []).append(
                     (
-                        f"{src_index:7d} {rec_index1:7d} "
+                        f"{src_index:8d} {rec_index1:8d} "
                         f"{staname1!s:>6} {stla1:9.4f} {stlo1:9.4f} "
-                        f"{stel1:9.4f} {rec_index2:7d} {staname2!s:>6} "
+                        f"{stel1:9.4f} {rec_index2:8d} {staname2!s:>6} "
                         f"{stla2:9.4f} {stlo2:9.4f} {stel2:9.4f} "
-                        f"{phase!s} {tt:8.4f} {weight:7.4f}\n"
+                        f"{phase!s:4} {tt:8.4f} {weight:7.4f}\n"
                     )
                 )
             rec_cs_lines_by_src = {
@@ -629,11 +629,11 @@ In this case, please set dist_in_data=True and read again."""
                 ) = row
                 rec_cr_lines_by_src.setdefault(src_index, []).append(
                     (
-                        f"{src_index:7d} {rec_index:7d} {staname!s:>6} "
+                        f"{src_index:8d} {rec_index:8d} {staname!s:>6} "
                         f"{stla:9.4f} {stlo:9.4f} {stel:9.4f} "
-                        f"{src_index2:7d} {event_id2!s:>6} "
+                        f"{src_index2:8d} {event_id2!s:>6} "
                         f"{evla2:9.4f} {evlo2:9.4f} {evdp2:9.4f} "
-                        f"{phase!s} {tt:8.4f} {weight:7.4f}\n"
+                        f"{phase!s:4} {tt:8.4f} {weight:7.4f}\n"
                     )
                 )
             rec_cr_lines_by_src = {
@@ -672,7 +672,7 @@ In this case, please set dist_in_data=True and read again."""
                 origin_time.strftime("%Y_%m_%d_%H_%M_%S.%f").split("_")
             )
             output.write(
-                f"{idx:d} {time_fields} {evla:.4f} {evlo:.4f} "
+                f"{idx:8d} {time_fields} {evla:.4f} {evlo:.4f} "
                 f"{evdp:.4f} {mag:.4f} {num_rec} {event_id} "
                 f"{weight:.4f}\n"
             )
