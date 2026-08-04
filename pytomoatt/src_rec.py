@@ -247,8 +247,8 @@ class SrcRec:
             has multiple coordinates/elevations. ``"error"`` lists every
             conflicting receiver location and stops reading; ``"remove"``
             removes all observations involving those receiver names;
-            ``"weighted_average"`` replaces conflicting locations with their
-            occurrence-count weighted average; and
+            ``"max_count"`` keeps the location with the highest occurrence
+            count and removes observations at other locations; and
             ``"rename"`` keeps the locations and appends ``_A``, ``_B``, ...
             to distinguish them.
         :type conflicting_receiver_action: str
@@ -259,13 +259,13 @@ class SrcRec:
             "error",
             "remove",
             "rename",
-            "weighted_average",
+            "max_count",
         }
         if conflicting_receiver_action not in valid_conflicting_receiver_actions:
             raise ValueError(
                 "Invalid conflicting_receiver_action: "
                 f"{conflicting_receiver_action!r}. Supported actions are "
-                "'error', 'remove', 'rename', and 'weighted_average'."
+                "'error', 'remove', 'rename', and 'max_count'."
             )
 
         sr = cls(fname=fname, **kwargs)
@@ -705,18 +705,18 @@ In this case, please set dist_in_data=True and read again."""
             multiple coordinates/elevations. ``"error"`` raises a
             :class:`ValueError` containing all conflicting locations;
             ``"remove"`` removes all observations involving those names;
-            ``"weighted_average"`` replaces conflicting locations with their
-            occurrence-count weighted average; and
+            ``"max_count"`` keeps the location with the highest occurrence
+            count and removes observations at other locations; and
             ``"rename"`` appends ``_A``, ``_B``, ... to each distinct
             location.
         :type conflicting_receiver_action: str
         """
-        valid_actions = {"error", "remove", "rename", "weighted_average"}
+        valid_actions = {"error", "remove", "rename", "max_count"}
         if conflicting_receiver_action not in valid_actions:
             raise ValueError(
                 "Invalid conflicting_receiver_action: "
                 f"{conflicting_receiver_action!r}. Supported actions are "
-                "'error', 'remove', 'rename', and 'weighted_average'."
+                "'error', 'remove', 'rename', and 'max_count'."
             )
 
         # get sources
@@ -769,21 +769,29 @@ In this case, please set dist_in_data=True and read again."""
                 )
                 self._remove_receiver_records(conflicting_receiver_names)
                 self.update_num_rec()
-            elif conflicting_receiver_action == "weighted_average":
-                average_map = self._build_weighted_receiver_location_map(
+            elif conflicting_receiver_action == "max_count":
+                keep_map = self._build_max_count_receiver_location_map(
                     receiver_rows,
                     conflicting_receiver_names,
                 )
-                self._average_receiver_records(average_map)
-                averaged_receivers = ", ".join(
-                    f"{name}: ({lat:.6f}, {lon:.6f}, {elev:.6f})"
-                    for name, (lat, lon, elev) in average_map.items()
-                )
+                self._remove_receiver_records_except_locations(keep_map)
+                kept_receivers = pd.DataFrame(
+                    [
+                        {
+                            "staname": name,
+                            "stla": latitude,
+                            "stlo": longitude,
+                            "stel": elevation,
+                        }
+                        for name, (latitude, longitude, elevation)
+                        in keep_map.items()
+                    ]
+                ).to_string(index=False)
                 self.log.SrcReclog.warning(
-                    "%s\nReplaced conflicting receiver locations with "
-                    "count-weighted averages: %s.",
+                    "%s\nKept max-count receiver locations and removed "
+                    "other conflicting locations:\n%s",
                     conflict_message,
-                    averaged_receivers,
+                    kept_receivers,
                 )
             else:
                 rename_map = self._build_conflicting_receiver_rename_map(
@@ -839,77 +847,84 @@ In this case, please set dist_in_data=True and read again."""
         )
 
     @staticmethod
-    def _build_weighted_receiver_location_map(
+    def _build_max_count_receiver_location_map(
         receiver_rows,
         conflicting_receiver_names,
     ):
-        """Map each conflicting receiver name to a count-weighted location."""
-        average_map = {}
+        """Map each conflicting receiver name to its highest-count location."""
+        keep_map = {}
         for receiver_name in conflicting_receiver_names:
             locations = receiver_rows.loc[
                 receiver_rows["staname"].astype(str) == receiver_name,
                 ["stla", "stlo", "stel", "count"],
-            ].copy()
-            weights = locations["count"].to_numpy(dtype=float)
-            average_map[receiver_name] = (
-                np.average(locations["stla"].to_numpy(dtype=float), weights=weights),
-                np.average(locations["stlo"].to_numpy(dtype=float), weights=weights),
-                np.average(locations["stel"].to_numpy(dtype=float), weights=weights),
+            ]
+            max_count_index = locations["count"].idxmax()
+            keep_location = locations.loc[max_count_index]
+            keep_map[receiver_name] = (
+                keep_location["stla"],
+                keep_location["stlo"],
+                keep_location["stel"],
             )
-        return average_map
+        return keep_map
 
     @staticmethod
-    def _average_receiver_column(
+    def _remove_receiver_records_except_location(
         receiver_records,
         name_col,
         latitude_col,
         longitude_col,
         elevation_col,
-        average_map,
+        keep_map,
     ):
-        """Apply averaged receiver locations to one record column set."""
+        """Remove conflicting receiver records except the chosen location."""
         if receiver_records.empty:
             return
+        keep = pd.Series(True, index=receiver_records.index, dtype=bool)
         receiver_names = receiver_records[name_col].astype(str)
-        for receiver_name, (latitude, longitude, elevation) in average_map.items():
-            mask = receiver_names == receiver_name
-            receiver_records.loc[mask, latitude_col] = latitude
-            receiver_records.loc[mask, longitude_col] = longitude
-            receiver_records.loc[mask, elevation_col] = elevation
+        for receiver_name, (latitude, longitude, elevation) in keep_map.items():
+            name_mask = receiver_names == receiver_name
+            keep_location_mask = (
+                (receiver_records[latitude_col] == latitude)
+                & (receiver_records[longitude_col] == longitude)
+                & (receiver_records[elevation_col] == elevation)
+            )
+            keep &= ~name_mask | keep_location_mask
+        receiver_records.drop(index=receiver_records.index[~keep], inplace=True)
+        receiver_records.reset_index(drop=True, inplace=True)
 
-    def _average_receiver_records(self, average_map):
-        """Apply averaged receiver locations consistently in all record types."""
-        self._average_receiver_column(
+    def _remove_receiver_records_except_locations(self, keep_map):
+        """Remove non-max-count receiver locations from all record types."""
+        self._remove_receiver_records_except_location(
             self.rec_points,
             "staname",
             "stla",
             "stlo",
             "stel",
-            average_map,
+            keep_map,
         )
-        self._average_receiver_column(
+        self._remove_receiver_records_except_location(
             self.rec_points_cs,
             "staname1",
             "stla1",
             "stlo1",
             "stel1",
-            average_map,
+            keep_map,
         )
-        self._average_receiver_column(
+        self._remove_receiver_records_except_location(
             self.rec_points_cs,
             "staname2",
             "stla2",
             "stlo2",
             "stel2",
-            average_map,
+            keep_map,
         )
-        self._average_receiver_column(
+        self._remove_receiver_records_except_location(
             self.rec_points_cr,
             "staname",
             "stla",
             "stlo",
             "stel",
-            average_map,
+            keep_map,
         )
 
     @staticmethod

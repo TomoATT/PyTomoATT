@@ -170,7 +170,7 @@ class TestSrcRec(unittest.TestCase):
             ["STA_CONFLICT_A", "STA_CONFLICT_B"],
         )
 
-    def test_weighted_average_conflicting_receivers_updates_all_record_types(self):
+    def test_max_count_conflicting_receivers_removes_other_locations(self):
         sr = SrcRec("unused")
         sr.src_points = pd.DataFrame({
             "event_id": ["EVENT_0", "EVENT_1"],
@@ -209,18 +209,18 @@ class TestSrcRec(unittest.TestCase):
             "stel": [100.0],
         })
 
-        sr.update_unique_src_rec(conflicting_receiver_action="weighted_average")
+        sr.update_unique_src_rec(conflicting_receiver_action="max_count")
 
-        expected = np.array([12.5, 32.5, 125.0])
+        expected = np.array([10.0, 30.0, 100.0])
+        self.assertEqual(sr.rec_points["staname"].tolist(), ["STA_CONFLICT"])
         self.assertTrue(
             np.allclose(
-                sr.rec_points.loc[
-                    sr.rec_points["staname"] == "STA_CONFLICT",
-                    ["stla", "stlo", "stel"],
-                ].to_numpy(dtype=float),
+                sr.rec_points.loc[0, ["stla", "stlo", "stel"]]
+                .to_numpy(dtype=float),
                 expected,
             )
         )
+        self.assertEqual(sr.rec_points_cs.shape[0], 1)
         self.assertTrue(
             np.allclose(
                 sr.rec_points_cs.loc[0, ["stla1", "stlo1", "stel1"]]
@@ -228,6 +228,7 @@ class TestSrcRec(unittest.TestCase):
                 expected,
             )
         )
+        self.assertEqual(sr.rec_points_cr.shape[0], 1)
         self.assertTrue(
             np.allclose(
                 sr.rec_points_cr.loc[0, ["stla", "stlo", "stel"]]
