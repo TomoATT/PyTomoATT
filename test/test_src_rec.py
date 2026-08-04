@@ -362,6 +362,80 @@ class TestSrcRec(unittest.TestCase):
         sr.generate_double_difference('cs', max_azi_gap=15, max_dist_gap=1.4)
         sr.generate_double_difference('cr', max_azi_gap=15, max_dist_gap=0.01)
 
+    def test_generate_double_difference_dis_type(self):
+        sr_cs = SrcRec("unused")
+        sr_cs.src_points = pd.DataFrame(
+            {
+                "evla": [0.0],
+                "evlo": [0.0],
+                "evdp": [1.0],
+                "event_id": ["E0"],
+                "weight": [1.0],
+            },
+            index=pd.Index([0], name="src_index"),
+        )
+        sr_cs.rec_points = pd.DataFrame(
+            {
+                "src_index": [0, 0],
+                "rec_index": [0, 1],
+                "staname": ["STA_E", "STA_W"],
+                "stla": [0.0, 0.0],
+                "stlo": [1.0, -1.0],
+                "stel": [0.0, 0.0],
+                "phase": ["P", "P"],
+                "tt": [1.0, 2.0],
+                "weight": [1.0, 1.0],
+            }
+        )
+        sr_cs.calc_distaz()
+
+        sr_cs._generate_cs(200.0, 0.1, dis_type="dis_dif")
+        self.assertEqual(sr_cs.rec_points_cs.shape[0], 1)
+        sr_cs._generate_cs(200.0, 0.1, dis_type="dis_pair")
+        self.assertEqual(sr_cs.rec_points_cs.shape[0], 0)
+
+        sr_cr = SrcRec("unused")
+        sr_cr.src_points = pd.DataFrame(
+            {
+                "evla": [1.0, -1.0],
+                "evlo": [0.0, 0.0],
+                "evdp": [1.0, 1.0],
+                "event_id": ["E0", "E1"],
+                "weight": [1.0, 1.0],
+            },
+            index=pd.Index([0, 1], name="src_index"),
+        )
+        sr_cr.rec_points = pd.DataFrame(
+            {
+                "src_index": [0, 1],
+                "rec_index": [0, 0],
+                "staname": ["STA", "STA"],
+                "stla": [0.0, 0.0],
+                "stlo": [0.0, 0.0],
+                "stel": [0.0, 0.0],
+                "phase": ["P", "P"],
+                "tt": [1.0, 2.0],
+                "weight": [1.0, 1.0],
+            }
+        )
+        sr_cr.receivers = pd.DataFrame(
+            {
+                "staname": ["STA"],
+                "stla": [0.0],
+                "stlo": [0.0],
+                "stel": [0.0],
+            }
+        )
+        sr_cr.calc_distaz()
+
+        sr_cr._generate_cr(200.0, 0.1, dis_type="dis_dif")
+        self.assertEqual(sr_cr.rec_points_cr.shape[0], 1)
+        sr_cr._generate_cr(200.0, 0.1, dis_type="dis_pair")
+        self.assertEqual(sr_cr.rec_points_cr.shape[0], 0)
+
+        with self.assertRaisesRegex(ValueError, "dis_type"):
+            sr_cr.generate_double_difference(dis_type="bad")
+
     def test_subcase_10(self):
         sr = SrcRec.read(self.fname)
         sr.box_weighting(0.4, 10, obj='both')

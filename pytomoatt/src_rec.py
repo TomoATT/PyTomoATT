@@ -2445,6 +2445,7 @@ In this case, please set dist_in_data=True and read again."""
 
     def generate_double_difference(self, type='cs', max_azi_gap=15, max_dist_gap=2.5,
                                     dd_weight='average', recalc_baz=False,
+                                    dis_type='dis_dif',
                                     same_phase=True, **kwargs):
         """
         Generate double difference data
@@ -2453,27 +2454,38 @@ In this case, please set dist_in_data=True and read again."""
         :type type: str, optional
         :param max_azi_gap: Maximum azimuthal gap for selecting events, defaults to 15
         :type max_azi_gap: float, optional
-        :param max_dist_gap: Maximum distance gap for selecting events, defaults to 2.5
+        :param max_dist_gap: Maximum distance gap in degrees for selecting
+                             pairs, defaults to 2.5
         :type max_dist_gap: float, optional
         :param dd_weight: Weighting method for double difference, options: ``average``, ``multiply``, defaults to ``average``
         :param recalc_baz: Recalculate azimuth and back azimuth, defaults to ``False``
         :type recalc_baz: bool, optional
+        :param dis_type: Distance constraint type. ``"dis_dif"`` compares the
+                         difference between the two source--receiver
+                         epicentral distances. ``"dis_pair"`` compares the
+                         station--station separation for common-source pairs
+                         and event--event separation for common-receiver
+                         pairs, defaults to ``"dis_dif"``.
+        :type dis_type: str, optional
         :param same_phase: Only pair records with the same phase, defaults to ``True``
         :type same_phase: bool, optional
 
         ``self.rec_points_cr`` or ``self.rec_points_cs`` are generated
         """
 
+        if dis_type not in {"dis_dif", "dis_pair"}:
+            raise ValueError("dis_type must be either 'dis_dif' or 'dis_pair'")
+
         if ("dist_deg" not in self.rec_points or "baz" not in self.rec_points) or recalc_baz:
             self.calc_distaz()
 
         if type == 'cs':
-            self._generate_cs(max_azi_gap, max_dist_gap, dd_weight, same_phase)
+            self._generate_cs(max_azi_gap, max_dist_gap, dd_weight, same_phase, dis_type)
         elif type == 'cr':
-            self._generate_cr(max_azi_gap, max_dist_gap, dd_weight, same_phase)
+            self._generate_cr(max_azi_gap, max_dist_gap, dd_weight, same_phase, dis_type)
         elif type == 'both':
-            self._generate_cs(max_azi_gap, max_dist_gap, dd_weight, same_phase)
-            self._generate_cr(max_azi_gap, max_dist_gap, dd_weight, same_phase)
+            self._generate_cs(max_azi_gap, max_dist_gap, dd_weight, same_phase, dis_type)
+            self._generate_cr(max_azi_gap, max_dist_gap, dd_weight, same_phase, dis_type)
         else:
             self.log.SrcReclog.error(
                 "Only 'cs', 'cr' or 'both' are supported for type of double difference"
@@ -2482,7 +2494,7 @@ In this case, please set dist_in_data=True and read again."""
         self.update(**kwargs)
 
     def _generate_cs(self, max_azi_gap, max_dist_gap, dd_weight='average',
-                     same_phase=True):
+                     same_phase=True, dis_type='dis_dif'):
         names, _ = setup_rec_points_dd('cs')
         self.rec_points_cs = pd.DataFrame(columns=names)
         src = self.rec_points.groupby("src_index")
@@ -2508,9 +2520,15 @@ In this case, please set dist_in_data=True and read again."""
                     baz_gap = abs(
                         (baz_values[i] - baz_values[j] + 180) % 360 - 180
                     )
+                    if dis_type == "dis_pair":
+                        dist_gap = DistAZ(
+                            stlas[i], stlos[i], stlas[j], stlos[j]
+                        ).delta
+                    else:
+                        dist_gap = abs(dist_deg_values[i] - dist_deg_values[j])
                     if (
                         baz_gap < max_azi_gap
-                        and abs(dist_deg_values[i] - dist_deg_values[j]) < max_dist_gap
+                        and dist_gap < max_dist_gap
                         and (not same_phase or phases[i] == phases[j])
                     ):
                         data_row = {
@@ -2538,7 +2556,7 @@ In this case, please set dist_in_data=True and read again."""
         )
 
     def _generate_cr(self, max_azi_gap, max_dist_gap, dd_weight='average',
-                     same_phase=True):
+                     same_phase=True, dis_type='dis_dif'):
         names, _ = setup_rec_points_dd('cr')
         self.rec_points_cr = pd.DataFrame(columns=names)
         src_id = self.src_points["event_id"].values
@@ -2558,7 +2576,7 @@ In this case, please set dist_in_data=True and read again."""
             baz_values = rec_data['baz'].values
             dist_deg_values = rec_data['dist_deg'].values
             rec_indices = rec_data['rec_index'].values
-            src_indices = rec_data['src_index'].values
+            src_indices = rec_data['src_index'].to_numpy(dtype=int)
             rec_weights = rec_data['weight'].values
             rec_phases = rec_data['phase'].values
             tts = rec_data['tt'].values
@@ -2568,9 +2586,16 @@ In this case, please set dist_in_data=True and read again."""
                     baz_gap = abs(
                         (baz_values[i] - baz_values[j] + 180) % 360 - 180
                     )
+                    if dis_type == "dis_pair":
+                        dist_gap = DistAZ(
+                            src_la[src_indices[i]], src_lo[src_indices[i]],
+                            src_la[src_index], src_lo[src_index],
+                        ).delta
+                    else:
+                        dist_gap = abs(dist_deg_values[i] - dist_deg_values[j])
                     if (
                         baz_gap < max_azi_gap
-                        and abs(dist_deg_values[i] - dist_deg_values[j]) < max_dist_gap
+                        and dist_gap < max_dist_gap
                         and (not same_phase or rec_phases[i] == rec_phases[j])
                     ):
                         data_row = {
