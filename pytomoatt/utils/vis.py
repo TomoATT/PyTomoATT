@@ -15,6 +15,23 @@ if TYPE_CHECKING:
     from pytomoatt.src_rec import SrcRec
 
 
+_PLOT_FONTSIZE = 14
+
+
+def _apply_axis_font_sizes(axis) -> None:
+    """Apply consistent label and tick font sizes to an axis."""
+    axis.xaxis.label.set_size(_PLOT_FONTSIZE)
+    axis.yaxis.label.set_size(_PLOT_FONTSIZE)
+    axis.tick_params(axis="both", labelsize=_PLOT_FONTSIZE)
+
+
+def _apply_colorbar_font_sizes(colorbar) -> None:
+    """Apply consistent label and tick font sizes to a colorbar."""
+    colorbar.ax.xaxis.label.set_size(_PLOT_FONTSIZE)
+    colorbar.ax.yaxis.label.set_size(_PLOT_FONTSIZE)
+    colorbar.ax.tick_params(labelsize=_PLOT_FONTSIZE)
+
+
 def _axis_limits(values: np.ndarray, padding: float = 0.1) -> tuple[float, float]:
     """Calculate padded limits, including for a constant-valued coordinate."""
     lower = float(np.min(values))
@@ -141,7 +158,7 @@ def plot_src_rec(
         if not np.isfinite(color_values).all():
             raise ValueError("src_points contains non-finite source weights")
         colorbar_label = "Source weight"
-        cmap = "plasma"
+        cmap = "jet"
     else:
         color_values = source_depth
         colorbar_label = "Source depth (km)"
@@ -172,8 +189,8 @@ def plot_src_rec(
     }
     scatter_options.update(kwargs)
     if color_by == "weight" and "norm" not in scatter_options:
-        vmin = scatter_options.pop("vmin", None)
-        vmax = scatter_options.pop("vmax", None)
+        vmin = scatter_options.pop("vmin", 0.0)
+        vmax = scatter_options.pop("vmax", 1.0)
         shared_norm = Normalize(vmin=vmin, vmax=vmax)
         shared_norm.autoscale_None(color_values)
         scatter_options["norm"] = shared_norm
@@ -202,7 +219,7 @@ def plot_src_rec(
         if receiver_color_values is None:
             receiver_scatter_options["c"] = "tab:red"
         else:
-            receiver_norm = Normalize()
+            receiver_norm = Normalize(vmin=source_scatter.norm.vmin, vmax=source_scatter.norm.vmax)
             receiver_norm.autoscale_None(receiver_color_values)
             receiver_scatter_options.update({
                 "c": receiver_color_values,
@@ -273,7 +290,7 @@ def plot_src_rec(
     latitude_depth_axis.set_axes_locator(_align_latitude_depth_axis)
     longitude_depth_axis.set_axes_locator(_align_longitude_depth_axis)
     colorbar_host.set_axes_locator(_align_colorbar_host)
-    map_axis.legend()
+    map_axis.legend(fontsize=_PLOT_FONTSIZE)
 
     latitude_depth_axis.set(
         xlabel="Depth (km)",
@@ -290,6 +307,8 @@ def plot_src_rec(
         ylim=depth_limits,
     )
     longitude_depth_axis.invert_yaxis()
+    for axis in (map_axis, latitude_depth_axis, longitude_depth_axis):
+        _apply_axis_font_sizes(axis)
 
     colorbar = figure.colorbar(
         source_scatter,
@@ -297,6 +316,7 @@ def plot_src_rec(
         orientation="horizontal",
     )
     colorbar.set_label(colorbar_label)
+    _apply_colorbar_font_sizes(colorbar)
 
     if receiver_color_values is not None and receiver_scatter is not None:
         receiver_colorbar_axis = colorbar_host.inset_axes(
@@ -308,9 +328,10 @@ def plot_src_rec(
             orientation="horizontal",
         )
         receiver_colorbar.set_label("Receiver weight")
+        _apply_colorbar_font_sizes(receiver_colorbar)
 
     if fname is not None:
-        figure.savefig(fname, dpi=300, bbox_inches="tight")
+        figure.savefig(fname, dpi=300, bbox_inches="tight",facecolor="white",edgecolor="white")
 
     return figure
 
@@ -423,6 +444,7 @@ def plot_travel_time(
         xlabel=distance_label,
         ylabel="Travel time (s)",
     )
+    _apply_axis_font_sizes(axis)
 
     travel_times = values[finite, 1]
     distances = values[finite, 0]
@@ -465,6 +487,6 @@ def plot_travel_time(
         axis.set_ylim(lower_limit, upper_limit)
 
     if fname is not None:
-        figure.savefig(fname, dpi=300, bbox_inches="tight", facecolor="white")
+        figure.savefig(fname, dpi=300, bbox_inches="tight", facecolor="white", edgecolor="white")
 
     return figure
