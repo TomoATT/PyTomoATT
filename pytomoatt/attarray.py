@@ -2,6 +2,8 @@ import xarray
 import numpy as np
 from scipy.interpolate import interpn
 from pyproj import Geod
+
+from pytomoatt.utils.rotate import rtp_rotation, rtp_rotation_reverse
 from .utils.common import interpolation_lola_linear
 
 class Dataset(xarray.Dataset):
@@ -17,7 +19,7 @@ class Dataset(xarray.Dataset):
         ds = cls(dataset.data_vars, dataset.coords)
         return ds
 
-    def interp_dep(self, depth:float, field:str, samp_interval=0):
+    def interp_dep(self, depth:float, field:str, samp_interval=0, rotate=None):
         """Interpolate map view with given depth
 
         :param depth: Depth in km
@@ -31,6 +33,7 @@ class Dataset(xarray.Dataset):
                               ``Nx`` is used for x/lon and ``Ny`` is used for
                               y/lat.
         :type samp_interval: int or sequence of int, optional
+        :param rotate: Rotation parameters [central_lat, central_lon, rotation_angle] in degrees, defaults to None
         :return: xyz data with 3 columns [lon, lat, value]
         :rtype: :class:`numpy.ndarray`
         """
@@ -84,9 +87,19 @@ class Dataset(xarray.Dataset):
                 points[:, 0:3]
             )
             data = points[:, [2, 1, 3]]
+
+        if rotate is not None:
+            try:    # rotate reversely, from computational grid to physical grid
+                central_lat, central_lon, rotation_angle = rotate
+                data[:, 1], data[:, 0] = rtp_rotation_reverse(data[:, 1], data[:, 0], central_lat, central_lon, rotation_angle)
+            except (TypeError, ValueError):
+                raise ValueError(
+                    "rotate must be a 3-item sequence: [central_lat, central_lon, rotation_angle]"
+                )
+
         return data
     
-    def interp_sec(self, start_point, end_point, field:str, val=10., flat_earth=False):
+    def interp_sec(self, start_point, end_point, field:str, val=10., flat_earth=False, rotate=None, input_type="cal", output_type="cal"):
         """Interpolate value along a cross section
 
         :param start_point: start point with [lon1, lat1]
@@ -99,9 +112,45 @@ class Dataset(xarray.Dataset):
         :type val: float
         :param flat_earth: whether to use flat earth model, defaults to False
         :type flat_earth: bool, optional
+        :param rotate: Rotation parameters [central_lat, central_lon, rotation_angle] in degrees, defaults to None
+        :param input_type: Specify the input coordinates type, defaults to "cal". If "cal" is provided, the input coordinates are computational coordinates used in TomoATT.
+                           If "phy" is provided, the input coordinates are physical coordinates. Now, rotate must be provided.
+        :type input_type: str, optional
+        :param output_type: Specify the output coordinates type, defaults to "cal". If "cal" is provided, the output coordinates are computational coordinates used in TomoATT.
+                           If "phy" is provided, the output coordinates are physical coordinates. Now, rotate must be provided.
+        :type output_type: str, optional
         :return: xyz data with 5 columns [lon, lat, dis, dep, value]
         :rtype: :class:`numpy.ndarray`
         """
+        # Check input coordinates type
+        if input_type not in ["cal", "phy"]:
+            raise ValueError(
+                "input_type must be 'cal' or 'phy'"
+            )
+        if output_type not in ["cal", "phy"]:
+            raise ValueError(
+                "output_type must be 'cal' or 'phy'"
+            )
+        if input_type == "phy" and rotate is None:
+            raise ValueError(
+                "rotate must be provided when input_type is 'phy'"
+            )
+        if output_type == "phy" and rotate is None:
+            raise ValueError(
+                "rotate must be provided when output_type is 'phy'"
+            )
+
+        # rotate input coordinates to computational coordinates if input_type is "phy"
+        if input_type == "phy":
+            try:
+                central_lat, central_lon, rotation_angle = rotate
+                start_point[1], start_point[0] = rtp_rotation(start_point[1], start_point[0], central_lat, central_lon, rotation_angle)
+                end_point[1], end_point[0] = rtp_rotation(end_point[1], end_point[0], central_lat, central_lon, rotation_angle)
+            except (TypeError, ValueError):
+                raise ValueError(
+                    "rotate must be a 3-item sequence: [central_lat, central_lon, rotation_angle]"
+                )
+        
         # Initialize a profile
         if flat_earth:
             sec_points, sec_range = interpolation_lola_linear(start_point, end_point, val)
@@ -131,4 +180,16 @@ class Dataset(xarray.Dataset):
         )
         points[:, 0] = 6371 - points[:, 0]
         data = points[:, [2, 1, 3, 0, 4]]
+
+        # rotate reversely, from computational grid to physical grid
+        if output_type == "phy":
+            try:    
+                central_lat, central_lon, rotation_angle = rotate
+                data[:, 1], data[:, 0] = rtp_rotation_reverse(data[:, 1], data[:, 0], central_lat, central_lon, rotation_angle)
+            except (TypeError, ValueError):
+                raise ValueError(
+                    "rotate must be a 3-item sequence: [central_lat, central_lon, rotation_angle]"
+                )
+
+        
         return data
