@@ -489,6 +489,7 @@ In this case, please set dist_in_data=True and read again."""
             sr.rec_points_cs.columns = cols
             sr.rec_points_cs = sr.rec_points_cs.astype(data_type)
 
+            sr._normalize_phase_labels()
             sr.update_unique_src_rec(
                 conflicting_receiver_action=conflicting_receiver_action
             )
@@ -693,6 +694,31 @@ In this case, please set dist_in_data=True and read again."""
         :rtype: SrcRec
         """
         return copy.deepcopy(self)
+
+    @staticmethod
+    def _normalize_phase_value(phase):
+        """Normalize known phase label variants while preserving DD suffixes."""
+        if not isinstance(phase, str):
+            return phase
+        if "," in phase:
+            base_phase, suffix = phase.split(",", 1)
+            suffix = f",{suffix}"
+        else:
+            base_phase = phase
+            suffix = ""
+        phase_map = {
+            "PG": "Pg",
+            "PN": "Pn",
+        }
+        return f"{phase_map.get(base_phase, base_phase)}{suffix}"
+
+    def _normalize_phase_labels(self):
+        """Normalize phase labels in absolute and double-difference records."""
+        for records in (self.rec_points, self.rec_points_cs, self.rec_points_cr):
+            if not records.empty and "phase" in records:
+                records.loc[:, "phase"] = records["phase"].map(
+                    self._normalize_phase_value
+                )
     
     def update_unique_src_rec(self, conflicting_receiver_action="error"):
         """
@@ -1353,6 +1379,7 @@ In this case, please set dist_in_data=True and read again."""
         :param mode: "first" to keep only the first occurrence of duplicate receivers, "mean" to average travel time, defaults to "mean"
         :type mode: str, optional
         """
+        self._normalize_phase_labels()
         self.update_unique_src_rec()
         self.remove_rec_by_new_src()
         self.remove_src_by_new_rec()

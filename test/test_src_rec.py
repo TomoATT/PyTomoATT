@@ -241,6 +241,18 @@ class TestSrcRec(unittest.TestCase):
             1,
         )
 
+    def test_normalize_phase_labels_corrects_pg_pn_case(self):
+        sr = SrcRec("unused")
+        sr.rec_points = pd.DataFrame({"phase": ["PG", "PN", "P"]})
+        sr.rec_points_cs = pd.DataFrame({"phase": ["PG,cs", "PN,cs"]})
+        sr.rec_points_cr = pd.DataFrame({"phase": ["PG,cr", "PN,cr"]})
+
+        sr._normalize_phase_labels()
+
+        self.assertEqual(sr.rec_points["phase"].tolist(), ["Pg", "Pn", "P"])
+        self.assertEqual(sr.rec_points_cs["phase"].tolist(), ["Pg,cs", "Pn,cs"])
+        self.assertEqual(sr.rec_points_cr["phase"].tolist(), ["Pg,cr", "Pn,cr"])
+
     def test_read_accepts_conflicting_receiver_action(self):
         src_rec_data = """\
 0 2020 1 1 0 0 0.0 1.0 2.0 3.0 1.0 1 EVENT_0 1.0
