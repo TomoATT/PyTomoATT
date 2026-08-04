@@ -43,10 +43,15 @@ class TestSrcRec(unittest.TestCase):
             "evdp": [3.0],
         })
         sr.rec_points = pd.DataFrame({
-            "staname": ["STA_CONFLICT", "STA_CONFLICT", "STA_OK"],
-            "stla": [10.0, 10.1, 20.0],
-            "stlo": [30.0, 30.0, 40.0],
-            "stel": [0.0, 0.0, 0.0],
+            "staname": [
+                "STA_CONFLICT",
+                "STA_CONFLICT",
+                "STA_CONFLICT",
+                "STA_OK",
+            ],
+            "stla": [10.0, 10.0, 10.1, 20.0],
+            "stlo": [30.0, 30.0, 30.0, 40.0],
+            "stel": [0.0, 0.0, 0.0, 0.0],
         })
 
         with self.assertRaises(ValueError) as raised:
@@ -58,10 +63,12 @@ class TestSrcRec(unittest.TestCase):
         self.assertIn("stla", message)
         self.assertIn("stlo", message)
         self.assertIn("stel", message)
+        self.assertIn("count", message)
         self.assertIn("STA_CONFLICT", message)
         self.assertIn("10.0", message)
         self.assertIn("10.1", message)
         self.assertIn("30.0", message)
+        self.assertIn("2", message)
 
     def test_remove_conflicting_receivers_removes_all_record_types(self):
         sr = SrcRec("unused")
@@ -161,6 +168,76 @@ class TestSrcRec(unittest.TestCase):
         self.assertEqual(
             sr.receivers["staname"].tolist(),
             ["STA_CONFLICT_A", "STA_CONFLICT_B"],
+        )
+
+    def test_weighted_average_conflicting_receivers_updates_all_record_types(self):
+        sr = SrcRec("unused")
+        sr.src_points = pd.DataFrame({
+            "event_id": ["EVENT_0", "EVENT_1"],
+            "evla": [1.0, 2.0],
+            "evlo": [3.0, 4.0],
+            "evdp": [5.0, 6.0],
+            "num_rec": [3, 1],
+        })
+        sr.rec_points = pd.DataFrame({
+            "src_index": [0, 1],
+            "staname": ["STA_CONFLICT", "STA_CONFLICT"],
+            "stla": [10.0, 20.0],
+            "stlo": [30.0, 40.0],
+            "stel": [100.0, 200.0],
+        })
+        sr.rec_points_cs = pd.DataFrame({
+            "src_index": [0],
+            "staname1": ["STA_CONFLICT"],
+            "stla1": [10.0],
+            "stlo1": [30.0],
+            "stel1": [100.0],
+            "staname2": ["STA_CS"],
+            "stla2": [0.0],
+            "stlo2": [0.0],
+            "stel2": [0.0],
+        })
+        sr.rec_points_cr = pd.DataFrame({
+            "src_index": [0],
+            "event_id2": ["EVENT_1"],
+            "evla2": [2.0],
+            "evlo2": [4.0],
+            "evdp2": [6.0],
+            "staname": ["STA_CONFLICT"],
+            "stla": [10.0],
+            "stlo": [30.0],
+            "stel": [100.0],
+        })
+
+        sr.update_unique_src_rec(conflicting_receiver_action="weighted_average")
+
+        expected = np.array([12.5, 32.5, 125.0])
+        self.assertTrue(
+            np.allclose(
+                sr.rec_points.loc[
+                    sr.rec_points["staname"] == "STA_CONFLICT",
+                    ["stla", "stlo", "stel"],
+                ].to_numpy(dtype=float),
+                expected,
+            )
+        )
+        self.assertTrue(
+            np.allclose(
+                sr.rec_points_cs.loc[0, ["stla1", "stlo1", "stel1"]]
+                .to_numpy(dtype=float),
+                expected,
+            )
+        )
+        self.assertTrue(
+            np.allclose(
+                sr.rec_points_cr.loc[0, ["stla", "stlo", "stel"]]
+                .to_numpy(dtype=float),
+                expected,
+            )
+        )
+        self.assertEqual(
+            sr.receivers[sr.receivers["staname"] == "STA_CONFLICT"].shape[0],
+            1,
         )
 
     def test_read_accepts_conflicting_receiver_action(self):

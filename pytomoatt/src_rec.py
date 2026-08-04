@@ -246,19 +246,26 @@ class SrcRec:
         :param conflicting_receiver_action: How to handle a receiver name that
             has multiple coordinates/elevations. ``"error"`` lists every
             conflicting receiver location and stops reading; ``"remove"``
-            removes all observations involving those receiver names; and
+            removes all observations involving those receiver names;
+            ``"weighted_average"`` replaces conflicting locations with their
+            occurrence-count weighted average; and
             ``"rename"`` keeps the locations and appends ``_A``, ``_B``, ...
             to distinguish them.
         :type conflicting_receiver_action: str
         :return: class of SrcRec
         :rtype: SrcRec
         """
-        valid_conflicting_receiver_actions = {"error", "remove", "rename"}
+        valid_conflicting_receiver_actions = {
+            "error",
+            "remove",
+            "rename",
+            "weighted_average",
+        }
         if conflicting_receiver_action not in valid_conflicting_receiver_actions:
             raise ValueError(
                 "Invalid conflicting_receiver_action: "
                 f"{conflicting_receiver_action!r}. Supported actions are "
-                "'error', 'remove', and 'rename'."
+                "'error', 'remove', 'rename', and 'weighted_average'."
             )
 
         sr = cls(fname=fname, **kwargs)
@@ -697,17 +704,19 @@ In this case, please set dist_in_data=True and read again."""
         :param conflicting_receiver_action: How to handle receiver names with
             multiple coordinates/elevations. ``"error"`` raises a
             :class:`ValueError` containing all conflicting locations;
-            ``"remove"`` removes all observations involving those names; and
+            ``"remove"`` removes all observations involving those names;
+            ``"weighted_average"`` replaces conflicting locations with their
+            occurrence-count weighted average; and
             ``"rename"`` appends ``_A``, ``_B``, ... to each distinct
             location.
         :type conflicting_receiver_action: str
         """
-        valid_actions = {"error", "remove", "rename"}
+        valid_actions = {"error", "remove", "rename", "weighted_average"}
         if conflicting_receiver_action not in valid_actions:
             raise ValueError(
                 "Invalid conflicting_receiver_action: "
                 f"{conflicting_receiver_action!r}. Supported actions are "
-                "'error', 'remove', and 'rename'."
+                "'error', 'remove', 'rename', and 'weighted_average'."
             )
 
         # get sources
@@ -741,7 +750,7 @@ In this case, please set dist_in_data=True and read again."""
         ].drop_duplicates().astype(str).tolist()
         if conflicting_receiver_names:
             conflicting_receiver_details = receiver_rows.loc[
-                conflicting_receiver_mask, rec_col
+                conflicting_receiver_mask, rec_col + ["count"]
             ].sort_values(rec_col, kind="stable")
             conflict_message = (
                 "Found conflicting coordinates/elevations for "
@@ -760,6 +769,22 @@ In this case, please set dist_in_data=True and read again."""
                 )
                 self._remove_receiver_records(conflicting_receiver_names)
                 self.update_num_rec()
+            elif conflicting_receiver_action == "weighted_average":
+                average_map = self._build_weighted_receiver_location_map(
+                    receiver_rows,
+                    conflicting_receiver_names,
+                )
+                self._average_receiver_records(average_map)
+                averaged_receivers = ", ".join(
+                    f"{name}: ({lat:.6f}, {lon:.6f}, {elev:.6f})"
+                    for name, (lat, lon, elev) in average_map.items()
+                )
+                self.log.SrcReclog.warning(
+                    "%s\nReplaced conflicting receiver locations with "
+                    "count-weighted averages: %s.",
+                    conflict_message,
+                    averaged_receivers,
+                )
             else:
                 rename_map = self._build_conflicting_receiver_rename_map(
                     receiver_rows,
@@ -775,7 +800,7 @@ In this case, please set dist_in_data=True and read again."""
 
             receiver_rows = self._collect_receiver_rows()
 
-        self.receivers = receiver_rows.reset_index(drop=True)
+        self.receivers = receiver_rows.loc[:, rec_col].reset_index(drop=True)
         self.receivers = self.receivers.astype(
             {
                 "stla": float,
@@ -806,9 +831,86 @@ In this case, please set dist_in_data=True and read again."""
                     ["staname", "stla", "stlo", "stel"]
                 ].values,
             ])
-        return pd.DataFrame(
-            receivers, columns=rec_col
-        ).drop_duplicates(ignore_index=True)
+        return (
+            pd.DataFrame(receivers, columns=rec_col)
+            .groupby(rec_col, as_index=False, sort=False)
+            .size()
+            .rename(columns={"size": "count"})
+        )
+
+    @staticmethod
+    def _build_weighted_receiver_location_map(
+        receiver_rows,
+        conflicting_receiver_names,
+    ):
+        """Map each conflicting receiver name to a count-weighted location."""
+        average_map = {}
+        for receiver_name in conflicting_receiver_names:
+            locations = receiver_rows.loc[
+                receiver_rows["staname"].astype(str) == receiver_name,
+                ["stla", "stlo", "stel", "count"],
+            ].copy()
+            weights = locations["count"].to_numpy(dtype=float)
+            average_map[receiver_name] = (
+                np.average(locations["stla"].to_numpy(dtype=float), weights=weights),
+                np.average(locations["stlo"].to_numpy(dtype=float), weights=weights),
+                np.average(locations["stel"].to_numpy(dtype=float), weights=weights),
+            )
+        return average_map
+
+    @staticmethod
+    def _average_receiver_column(
+        receiver_records,
+        name_col,
+        latitude_col,
+        longitude_col,
+        elevation_col,
+        average_map,
+    ):
+        """Apply averaged receiver locations to one record column set."""
+        if receiver_records.empty:
+            return
+        receiver_names = receiver_records[name_col].astype(str)
+        for receiver_name, (latitude, longitude, elevation) in average_map.items():
+            mask = receiver_names == receiver_name
+            receiver_records.loc[mask, latitude_col] = latitude
+            receiver_records.loc[mask, longitude_col] = longitude
+            receiver_records.loc[mask, elevation_col] = elevation
+
+    def _average_receiver_records(self, average_map):
+        """Apply averaged receiver locations consistently in all record types."""
+        self._average_receiver_column(
+            self.rec_points,
+            "staname",
+            "stla",
+            "stlo",
+            "stel",
+            average_map,
+        )
+        self._average_receiver_column(
+            self.rec_points_cs,
+            "staname1",
+            "stla1",
+            "stlo1",
+            "stel1",
+            average_map,
+        )
+        self._average_receiver_column(
+            self.rec_points_cs,
+            "staname2",
+            "stla2",
+            "stlo2",
+            "stel2",
+            average_map,
+        )
+        self._average_receiver_column(
+            self.rec_points_cr,
+            "staname",
+            "stla",
+            "stlo",
+            "stel",
+            average_map,
+        )
 
     @staticmethod
     def _receiver_alphabetic_suffix(index):
