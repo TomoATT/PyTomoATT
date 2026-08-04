@@ -34,7 +34,7 @@ class TestSrcRec(unittest.TestCase):
         ):
             SrcRec.read(missing_file)
 
-    def test_conflicting_receiver_warning_lists_station_names(self):
+    def test_conflicting_receiver_error_lists_station_locations(self):
         sr = SrcRec("unused")
         sr.src_points = pd.DataFrame({
             "event_id": ["EVENT_0"],
@@ -49,16 +49,160 @@ class TestSrcRec(unittest.TestCase):
             "stel": [0.0, 0.0, 0.0],
         })
 
-        with self.assertLogs("SrcRec", level="WARNING") as captured_logs:
+        with self.assertRaises(ValueError) as raised:
             sr.update_unique_src_rec()
 
-        warning = captured_logs.output[0]
-        self.assertIn("1 receiver(s): STA_CONFLICT", warning)
-        self.assertNotIn("Keeping", warning)
+        message = str(raised.exception)
+        self.assertIn("1 receiver(s)", message)
+        self.assertIn("staname", message)
+        self.assertIn("stla", message)
+        self.assertIn("stlo", message)
+        self.assertIn("stel", message)
+        self.assertIn("STA_CONFLICT", message)
+        self.assertIn("10.0", message)
+        self.assertIn("10.1", message)
+        self.assertIn("30.0", message)
+
+    def test_remove_conflicting_receivers_removes_all_record_types(self):
+        sr = SrcRec("unused")
+        sr.src_points = pd.DataFrame({
+            "event_id": ["EVENT_0", "EVENT_1"],
+            "evla": [1.0, 2.0],
+            "evlo": [3.0, 4.0],
+            "evdp": [5.0, 6.0],
+            "num_rec": [5, 1],
+        })
+        sr.rec_points = pd.DataFrame({
+            "src_index": [0, 1, 0],
+            "staname": ["STA_CONFLICT", "STA_CONFLICT", "STA_OK"],
+            "stla": [10.0, 10.1, 20.0],
+            "stlo": [30.0, 30.0, 40.0],
+            "stel": [0.0, 0.0, 0.0],
+        })
+        sr.rec_points_cs = pd.DataFrame({
+            "src_index": [0, 0],
+            "staname1": ["STA_CONFLICT", "STA_CS_1"],
+            "stla1": [10.0, 21.0],
+            "stlo1": [30.0, 41.0],
+            "stel1": [0.0, 0.0],
+            "staname2": ["STA_CS_0", "STA_CS_2"],
+            "stla2": [22.0, 23.0],
+            "stlo2": [42.0, 43.0],
+            "stel2": [0.0, 0.0],
+        })
+        sr.rec_points_cr = pd.DataFrame({
+            "src_index": [0, 0],
+            "event_id2": ["EVENT_1", "EVENT_1"],
+            "evla2": [2.0, 2.0],
+            "evlo2": [4.0, 4.0],
+            "evdp2": [6.0, 6.0],
+            "staname": ["STA_CONFLICT", "STA_CR_OK"],
+            "stla": [10.0, 24.0],
+            "stlo": [30.0, 44.0],
+            "stel": [0.0, 0.0],
+        })
+
+        sr.update_unique_src_rec(conflicting_receiver_action="remove")
+
+        self.assertEqual(sr.rec_points["staname"].tolist(), ["STA_OK"])
+        self.assertEqual(sr.rec_points_cs["staname1"].tolist(), ["STA_CS_1"])
+        self.assertEqual(sr.rec_points_cr["staname"].tolist(), ["STA_CR_OK"])
+        self.assertNotIn("STA_CONFLICT", sr.receivers["staname"].tolist())
+        self.assertEqual(sr.src_points["num_rec"].tolist(), [3, 0])
+
+    def test_rename_conflicting_receivers_updates_all_record_types(self):
+        sr = SrcRec("unused")
+        sr.src_points = pd.DataFrame({
+            "event_id": ["EVENT_0", "EVENT_1"],
+            "evla": [1.0, 2.0],
+            "evlo": [3.0, 4.0],
+            "evdp": [5.0, 6.0],
+            "num_rec": [3, 1],
+        })
+        sr.rec_points = pd.DataFrame({
+            "src_index": [0, 1],
+            "staname": ["STA_CONFLICT", "STA_CONFLICT"],
+            "stla": [10.0, 10.1],
+            "stlo": [30.0, 30.0],
+            "stel": [0.0, 0.0],
+        })
+        sr.rec_points_cs = pd.DataFrame({
+            "src_index": [0],
+            "staname1": ["STA_CONFLICT"],
+            "stla1": [10.1],
+            "stlo1": [30.0],
+            "stel1": [0.0],
+            "staname2": ["STA_CONFLICT"],
+            "stla2": [10.0],
+            "stlo2": [30.0],
+            "stel2": [0.0],
+        })
+        sr.rec_points_cr = pd.DataFrame({
+            "src_index": [0],
+            "event_id2": ["EVENT_1"],
+            "evla2": [2.0],
+            "evlo2": [4.0],
+            "evdp2": [6.0],
+            "staname": ["STA_CONFLICT"],
+            "stla": [10.0],
+            "stlo": [30.0],
+            "stel": [0.0],
+        })
+
+        sr.update_unique_src_rec(conflicting_receiver_action="rename")
+
+        self.assertEqual(
+            sr.rec_points["staname"].tolist(),
+            ["STA_CONFLICT_A", "STA_CONFLICT_B"],
+        )
+        self.assertEqual(sr.rec_points_cs["staname1"].iloc[0], "STA_CONFLICT_B")
+        self.assertEqual(sr.rec_points_cs["staname2"].iloc[0], "STA_CONFLICT_A")
+        self.assertEqual(sr.rec_points_cr["staname"].iloc[0], "STA_CONFLICT_A")
         self.assertEqual(
             sr.receivers["staname"].tolist(),
-            ["STA_CONFLICT", "STA_OK"],
+            ["STA_CONFLICT_A", "STA_CONFLICT_B"],
         )
+
+    def test_read_accepts_conflicting_receiver_action(self):
+        src_rec_data = """\
+0 2020 1 1 0 0 0.0 1.0 2.0 3.0 1.0 1 EVENT_0 1.0
+0 0 STA_CONFLICT 10.0 30.0 0.0 P 1.0 1.0
+1 2020 1 2 0 0 0.0 4.0 5.0 6.0 1.0 1 EVENT_1 1.0
+1 0 STA_CONFLICT 10.1 30.0 0.0 P 1.0 1.0
+"""
+        with TemporaryDirectory() as directory:
+            input_file = join(directory, "conflicting_src_rec.dat")
+            with open(input_file, "w") as output:
+                output.write(src_rec_data)
+
+            with self.assertRaisesRegex(ValueError, "STA_CONFLICT"):
+                SrcRec.read(input_file)
+
+            sr = SrcRec.read(
+                input_file,
+                conflicting_receiver_action="remove",
+            )
+            renamed_sr = SrcRec.read(
+                input_file,
+                conflicting_receiver_action="rename",
+            )
+
+        self.assertTrue(sr.rec_points.empty)
+        self.assertTrue(sr.receivers.empty)
+        self.assertEqual(sr.src_points["num_rec"].tolist(), [0, 0])
+        self.assertEqual(
+            renamed_sr.rec_points["staname"].tolist(),
+            ["STA_CONFLICT_A", "STA_CONFLICT_B"],
+        )
+
+    def test_remove_specified_recs_also_removes_double_difference_records(self):
+        sr = SrcRec.read(self.duplicate_index_fname)
+
+        sr.remove_specified_recs(["STA1"])
+
+        self.assertNotIn("STA1", sr.rec_points["staname"].tolist())
+        self.assertTrue(sr.rec_points_cs.empty)
+        self.assertTrue(sr.rec_points_cr.empty)
 
     def test_read_reindexes_duplicate_file_src_indices(self):
         sr = SrcRec.read(self.duplicate_index_fname)

@@ -221,7 +221,14 @@ class SrcRec:
             raise TypeError("rec_points_cr should be in DataFrame")
 
     @classmethod
-    def read(cls, fname: str, dist_in_data=False, name_net_and_sta=False, **kwargs):
+    def read(
+        cls,
+        fname: str,
+        dist_in_data=False,
+        name_net_and_sta=False,
+        conflicting_receiver_action="error",
+        **kwargs,
+    ):
         """
         Read source <--> receiver file to pandas.DataFrame
 
@@ -236,9 +243,24 @@ class SrcRec:
         :type dist_in_data: bool
         :param name_net_and_sta: Whether to include network and station name in the src_rec file
         :type name_net_and_sta: bool
+        :param conflicting_receiver_action: How to handle a receiver name that
+            has multiple coordinates/elevations. ``"error"`` lists every
+            conflicting receiver location and stops reading; ``"remove"``
+            removes all observations involving those receiver names; and
+            ``"rename"`` keeps the locations and appends ``_A``, ``_B``, ...
+            to distinguish them.
+        :type conflicting_receiver_action: str
         :return: class of SrcRec
         :rtype: SrcRec
         """
+        valid_conflicting_receiver_actions = {"error", "remove", "rename"}
+        if conflicting_receiver_action not in valid_conflicting_receiver_actions:
+            raise ValueError(
+                "Invalid conflicting_receiver_action: "
+                f"{conflicting_receiver_action!r}. Supported actions are "
+                "'error', 'remove', and 'rename'."
+            )
+
         sr = cls(fname=fname, **kwargs)
         parsed_url = urlparse(str(fname))
         is_remote = (
@@ -460,7 +482,9 @@ In this case, please set dist_in_data=True and read again."""
             sr.rec_points_cs.columns = cols
             sr.rec_points_cs = sr.rec_points_cs.astype(data_type)
 
-            sr.update_unique_src_rec()
+            sr.update_unique_src_rec(
+                conflicting_receiver_action=conflicting_receiver_action
+            )
         return sr
 
     def write(self, fname="src_rec_file"):
@@ -663,13 +687,29 @@ In this case, please set dist_in_data=True and read again."""
         """
         return copy.deepcopy(self)
     
-    def update_unique_src_rec(self):
+    def update_unique_src_rec(self, conflicting_receiver_action="error"):
         """
         Update unique sources and receivers
 
         The unique sources and receivers are stored 
         in ``SrcRec.sources`` and ``SrcRec.receivers`` respectively.
+
+        :param conflicting_receiver_action: How to handle receiver names with
+            multiple coordinates/elevations. ``"error"`` raises a
+            :class:`ValueError` containing all conflicting locations;
+            ``"remove"`` removes all observations involving those names; and
+            ``"rename"`` appends ``_A``, ``_B``, ... to each distinct
+            location.
+        :type conflicting_receiver_action: str
         """
+        valid_actions = {"error", "remove", "rename"}
+        if conflicting_receiver_action not in valid_actions:
+            raise ValueError(
+                "Invalid conflicting_receiver_action: "
+                f"{conflicting_receiver_action!r}. Supported actions are "
+                "'error', 'remove', and 'rename'."
+            )
+
         # get sources
         src_col = ["event_id", "evla", "evlo", "evdp"]
         sources = self.src_points[src_col].values
@@ -692,24 +732,7 @@ In this case, please set dist_in_data=True and read again."""
 
         # get receivers
         rec_col = ["staname", "stla", "stlo", "stel"]
-        receivers = self.rec_points[rec_col].values
-        if not self.rec_points_cs.empty:
-            receivers = np.vstack(
-                [receivers, self.rec_points_cs[
-                ["staname1", "stla1", "stlo1", "stel1"]
-            ].values])
-            receivers = np.vstack(
-                [receivers, self.rec_points_cs[
-                ["staname2", "stla2", "stlo2", "stel2"]
-            ].values])
-        if not self.rec_points_cr.empty:
-            receivers = np.vstack(
-                [receivers, self.rec_points_cr[
-                ["staname", "stla", "stlo", "stel"]
-            ].values])
-        receiver_rows = pd.DataFrame(
-            receivers, columns=rec_col
-        ).drop_duplicates(ignore_index=True)
+        receiver_rows = self._collect_receiver_rows()
         conflicting_receiver_mask = receiver_rows.duplicated(
             subset="staname", keep=False
         )
@@ -717,15 +740,42 @@ In this case, please set dist_in_data=True and read again."""
             conflicting_receiver_mask, "staname"
         ].drop_duplicates().astype(str).tolist()
         if conflicting_receiver_names:
-            self.log.SrcReclog.warning(
-                "Found conflicting coordinates/elevations for %d "
-                "receiver(s): %s.",
-                len(conflicting_receiver_names),
-                ", ".join(conflicting_receiver_names),
+            conflicting_receiver_details = receiver_rows.loc[
+                conflicting_receiver_mask, rec_col
+            ].sort_values(rec_col, kind="stable")
+            conflict_message = (
+                "Found conflicting coordinates/elevations for "
+                f"{len(conflicting_receiver_names)} receiver(s):\n"
+                f"{conflicting_receiver_details.to_string(index=False)}"
             )
-        self.receivers = receiver_rows.drop_duplicates(
-            subset="staname", keep="first", ignore_index=True
-        )
+
+            if conflicting_receiver_action == "error":
+                self.log.SrcReclog.error(conflict_message)
+                raise ValueError(conflict_message)
+
+            if conflicting_receiver_action == "remove":
+                self.log.SrcReclog.warning(
+                    "%s\nRemoving all observations involving these receivers.",
+                    conflict_message,
+                )
+                self._remove_receiver_records(conflicting_receiver_names)
+                self.update_num_rec()
+            else:
+                rename_map = self._build_conflicting_receiver_rename_map(
+                    receiver_rows,
+                    conflicting_receiver_names,
+                )
+                self._rename_receiver_records(rename_map)
+                renamed_receivers = ", ".join(rename_map.values())
+                self.log.SrcReclog.warning(
+                    "%s\nRenamed conflicting receiver locations as: %s.",
+                    conflict_message,
+                    renamed_receivers,
+                )
+
+            receiver_rows = self._collect_receiver_rows()
+
+        self.receivers = receiver_rows.reset_index(drop=True)
         self.receivers = self.receivers.astype(
             {
                 "stla": float,
@@ -734,6 +784,127 @@ In this case, please set dist_in_data=True and read again."""
             }
         )
         self.receivers.index = np.arange(len(self.receivers))
+
+    def _collect_receiver_rows(self):
+        """Collect distinct receiver names and locations from all record types."""
+        rec_col = ["staname", "stla", "stlo", "stel"]
+        receivers = self.rec_points[rec_col].values
+        if not self.rec_points_cs.empty:
+            receivers = np.vstack([
+                receivers,
+                self.rec_points_cs[
+                    ["staname1", "stla1", "stlo1", "stel1"]
+                ].values,
+                self.rec_points_cs[
+                    ["staname2", "stla2", "stlo2", "stel2"]
+                ].values,
+            ])
+        if not self.rec_points_cr.empty:
+            receivers = np.vstack([
+                receivers,
+                self.rec_points_cr[
+                    ["staname", "stla", "stlo", "stel"]
+                ].values,
+            ])
+        return pd.DataFrame(
+            receivers, columns=rec_col
+        ).drop_duplicates(ignore_index=True)
+
+    @staticmethod
+    def _receiver_alphabetic_suffix(index):
+        """Convert a zero-based index to A, B, ..., Z, AA, AB, ... ."""
+        suffix = ""
+        index += 1
+        while index:
+            index, remainder = divmod(index - 1, 26)
+            suffix = chr(ord("A") + remainder) + suffix
+        return suffix
+
+    def _build_conflicting_receiver_rename_map(
+        self,
+        receiver_rows,
+        conflicting_receiver_names,
+    ):
+        """Map each conflicting name/location tuple to a unique suffixed name."""
+        rename_map = {}
+        used_names = set(receiver_rows["staname"].astype(str))
+        for receiver_name in conflicting_receiver_names:
+            locations = receiver_rows.loc[
+                receiver_rows["staname"].astype(str) == receiver_name,
+                ["stla", "stlo", "stel"],
+            ]
+            suffix_index = 0
+            for location in locations.itertuples(index=False, name=None):
+                while True:
+                    suffix = self._receiver_alphabetic_suffix(suffix_index)
+                    suffix_index += 1
+                    renamed_receiver = f"{receiver_name}_{suffix}"
+                    if renamed_receiver not in used_names:
+                        break
+                used_names.add(renamed_receiver)
+                rename_map[(receiver_name, *location)] = renamed_receiver
+        return rename_map
+
+    @staticmethod
+    def _rename_receiver_column(
+        receiver_records,
+        name_col,
+        latitude_col,
+        longitude_col,
+        elevation_col,
+        rename_map,
+    ):
+        """Apply a receiver name/location mapping to one record column set."""
+        if receiver_records.empty:
+            return
+        conflicting_names = {key[0] for key in rename_map}
+        conflicting_mask = receiver_records[name_col].astype(str).isin(
+            conflicting_names
+        )
+        conflicting_locations = receiver_records.loc[
+            conflicting_mask,
+            [name_col, latitude_col, longitude_col, elevation_col],
+        ]
+        receiver_records.loc[conflicting_mask, name_col] = [
+            rename_map[(str(name), latitude, longitude, elevation)]
+            for name, latitude, longitude, elevation
+            in conflicting_locations.itertuples(index=False, name=None)
+        ]
+
+    def _rename_receiver_records(self, rename_map):
+        """Rename receiver locations consistently in all record types."""
+        self._rename_receiver_column(
+            self.rec_points,
+            "staname",
+            "stla",
+            "stlo",
+            "stel",
+            rename_map,
+        )
+        self._rename_receiver_column(
+            self.rec_points_cs,
+            "staname1",
+            "stla1",
+            "stlo1",
+            "stel1",
+            rename_map,
+        )
+        self._rename_receiver_column(
+            self.rec_points_cs,
+            "staname2",
+            "stla2",
+            "stlo2",
+            "stel2",
+            rename_map,
+        )
+        self._rename_receiver_column(
+            self.rec_points_cr,
+            "staname",
+            "stla",
+            "stlo",
+            "stel",
+            rename_map,
+        )
 
     def remove_duplicate_rec_by_src(self, mode="first"):
         """
@@ -1037,13 +1208,18 @@ In this case, please set dist_in_data=True and read again."""
         """
         update num_rec in ``src_points`` by current ``rec_points``
         """
-        self.src_points["num_rec"] = self.rec_points.groupby("src_index").size()
-        if not self.rec_points_cr.empty:
-            num = self.rec_points_cr.groupby("src_index").size()
-            self.src_points.loc[num.index, "num_rec"] += num
-        if not self.rec_points_cs.empty:
-            num = self.rec_points_cs.groupby("src_index").size()
-            self.src_points.loc[num.index, "num_rec"] += num
+        num_rec = pd.Series(0, index=self.src_points.index, dtype=int)
+        for receiver_records in (
+            self.rec_points,
+            self.rec_points_cr,
+            self.rec_points_cs,
+        ):
+            if receiver_records.empty:
+                continue
+            counts = receiver_records.groupby("src_index").size()
+            matching_indices = counts.index.intersection(num_rec.index)
+            num_rec.loc[matching_indices] += counts.loc[matching_indices].astype(int)
+        self.src_points["num_rec"] = num_rec
 
     def update(self, mode="mean"):
         """
@@ -1253,19 +1429,41 @@ In this case, please set dist_in_data=True and read again."""
             "rec_points after selection: {}".format(self._count_records())
         )
 
+    def _remove_receiver_records(self, rec_list):
+        """Remove named receivers consistently from all record types."""
+        receiver_names = {str(receiver_name) for receiver_name in rec_list}
+        self.rec_points = self.rec_points.loc[
+            ~self.rec_points["staname"].astype(str).isin(receiver_names)
+        ].reset_index(drop=True)
+        if not self.rec_points_cs.empty:
+            remove_cs_mask = (
+                self.rec_points_cs["staname1"].astype(str).isin(receiver_names)
+                | self.rec_points_cs["staname2"].astype(str).isin(receiver_names)
+            )
+            self.rec_points_cs = self.rec_points_cs.loc[
+                ~remove_cs_mask
+            ].reset_index(drop=True)
+        if not self.rec_points_cr.empty:
+            self.rec_points_cr = self.rec_points_cr.loc[
+                ~self.rec_points_cr["staname"].astype(str).isin(receiver_names)
+            ].reset_index(drop=True)
+
     def remove_specified_recs(self, rec_list, **kwargs):
         """Remove specified receivers
+
+        Receiver observations are removed from absolute, common-source, and
+        common-receiver records.
 
         :param rec_list: List of receivers to be removed
         :type rec_list: list
         """
         self.log.SrcReclog.info(
-            "rec_points before removing: {}".format(self.rec_points.shape)
+            "receiver records before removing: {}".format(self._count_records())
         )
-        self.rec_points = self.rec_points[~self.rec_points["staname"].isin(rec_list)]
+        self._remove_receiver_records(rec_list)
         self.update(**kwargs)
         self.log.SrcReclog.info(
-            "rec_points after removing: {}".format(self.rec_points.shape)
+            "receiver records after removing: {}".format(self._count_records())
         )
 
     def select_by_box_region(self, region, **kwargs):
