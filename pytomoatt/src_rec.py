@@ -17,6 +17,15 @@ from urllib.parse import urlparse
 pd.options.mode.chained_assignment = None  # default='warn'
 
 
+_RECEIVER_COLUMNS = ("staname", "stla", "stlo", "stel")
+_RECEIVER_FIELD_SCHEMAS = (
+    ("rec_points", _RECEIVER_COLUMNS),
+    ("rec_points_cs", ("staname1", "stla1", "stlo1", "stel1")),
+    ("rec_points_cs", ("staname2", "stla2", "stlo2", "stel2")),
+    ("rec_points_cr", _RECEIVER_COLUMNS),
+)
+
+
 class SrcRec:
     """
     I/O for source <--> receiver file
@@ -794,8 +803,7 @@ In this case, please set dist_in_data=True and read again."""
 
             if conflicting_receiver_action == "remove":
                 self.log.SrcReclog.warning(
-                    "%s\nRemoving all observations involving these receivers.",
-                    conflict_message,
+                    f"{conflict_message}\nRemoving all observations involving these receivers."
                 )
                 self._remove_receiver_records(conflicting_receiver_names)
                 self.update_num_rec()
@@ -805,6 +813,7 @@ In this case, please set dist_in_data=True and read again."""
                     conflicting_receiver_names,
                 )
                 self._remove_receiver_records_except_locations(keep_map)
+                self.update_num_rec()
                 kept_receivers = pd.DataFrame(
                     [
                         {
@@ -818,10 +827,9 @@ In this case, please set dist_in_data=True and read again."""
                     ]
                 ).to_string(index=False)
                 self.log.SrcReclog.warning(
-                    "%s\nKept max-count receiver locations and removed "
-                    "other conflicting locations:\n%s",
-                    conflict_message,
-                    kept_receivers,
+                    f"{conflict_message}\n"
+                    "Kept max-count receiver locations and removed "
+                    f"other conflicting locations:\n{kept_receivers}"
                 )
             else:
                 rename_map = self._build_conflicting_receiver_rename_map(
@@ -831,9 +839,8 @@ In this case, please set dist_in_data=True and read again."""
                 self._rename_receiver_records(rename_map)
                 renamed_receivers = ", ".join(rename_map.values())
                 self.log.SrcReclog.warning(
-                    "%s\nRenamed conflicting receiver locations as: %s.",
-                    conflict_message,
-                    renamed_receivers,
+                    f"{conflict_message}\nRenamed conflicting receiver locations as: "
+                    f"{renamed_receivers}."
                 )
 
             receiver_rows = self._collect_receiver_rows()
@@ -850,31 +857,28 @@ In this case, please set dist_in_data=True and read again."""
 
     def _collect_receiver_rows(self):
         """Collect distinct receiver names and locations from all record types."""
-        rec_col = ["staname", "stla", "stlo", "stel"]
-        receivers = self.rec_points[rec_col].values
-        if not self.rec_points_cs.empty:
-            receivers = np.vstack([
-                receivers,
-                self.rec_points_cs[
-                    ["staname1", "stla1", "stlo1", "stel1"]
-                ].values,
-                self.rec_points_cs[
-                    ["staname2", "stla2", "stlo2", "stel2"]
-                ].values,
-            ])
-        if not self.rec_points_cr.empty:
-            receivers = np.vstack([
-                receivers,
-                self.rec_points_cr[
-                    ["staname", "stla", "stlo", "stel"]
-                ].values,
-            ])
+        receiver_frames = []
+        for receiver_records, field_names in self._iter_receiver_fields():
+            if receiver_records.empty:
+                continue
+            receiver_frame = receiver_records.loc[:, field_names].copy()
+            receiver_frame.columns = _RECEIVER_COLUMNS
+            receiver_frames.append(receiver_frame)
+
+        if not receiver_frames:
+            return pd.DataFrame(columns=(*_RECEIVER_COLUMNS, "count"))
+
         return (
-            pd.DataFrame(receivers, columns=rec_col)
-            .groupby(rec_col, as_index=False, sort=False)
+            pd.concat(receiver_frames, ignore_index=True)
+            .groupby(list(_RECEIVER_COLUMNS), as_index=False, sort=False)
             .size()
             .rename(columns={"size": "count"})
         )
+
+    def _iter_receiver_fields(self):
+        """Yield each receiver record table and its location field names."""
+        for records_attribute, field_names in _RECEIVER_FIELD_SCHEMAS:
+            yield getattr(self, records_attribute), field_names
 
     @staticmethod
     def _build_max_count_receiver_location_map(
@@ -924,38 +928,12 @@ In this case, please set dist_in_data=True and read again."""
 
     def _remove_receiver_records_except_locations(self, keep_map):
         """Remove non-max-count receiver locations from all record types."""
-        self._remove_receiver_records_except_location(
-            self.rec_points,
-            "staname",
-            "stla",
-            "stlo",
-            "stel",
-            keep_map,
-        )
-        self._remove_receiver_records_except_location(
-            self.rec_points_cs,
-            "staname1",
-            "stla1",
-            "stlo1",
-            "stel1",
-            keep_map,
-        )
-        self._remove_receiver_records_except_location(
-            self.rec_points_cs,
-            "staname2",
-            "stla2",
-            "stlo2",
-            "stel2",
-            keep_map,
-        )
-        self._remove_receiver_records_except_location(
-            self.rec_points_cr,
-            "staname",
-            "stla",
-            "stlo",
-            "stel",
-            keep_map,
-        )
+        for receiver_records, field_names in self._iter_receiver_fields():
+            self._remove_receiver_records_except_location(
+                receiver_records,
+                *field_names,
+                keep_map,
+            )
 
     @staticmethod
     def _receiver_alphabetic_suffix(index):
@@ -1020,38 +998,12 @@ In this case, please set dist_in_data=True and read again."""
 
     def _rename_receiver_records(self, rename_map):
         """Rename receiver locations consistently in all record types."""
-        self._rename_receiver_column(
-            self.rec_points,
-            "staname",
-            "stla",
-            "stlo",
-            "stel",
-            rename_map,
-        )
-        self._rename_receiver_column(
-            self.rec_points_cs,
-            "staname1",
-            "stla1",
-            "stlo1",
-            "stel1",
-            rename_map,
-        )
-        self._rename_receiver_column(
-            self.rec_points_cs,
-            "staname2",
-            "stla2",
-            "stlo2",
-            "stel2",
-            rename_map,
-        )
-        self._rename_receiver_column(
-            self.rec_points_cr,
-            "staname",
-            "stla",
-            "stlo",
-            "stel",
-            rename_map,
-        )
+        for receiver_records, field_names in self._iter_receiver_fields():
+            self._rename_receiver_column(
+                receiver_records,
+                *field_names,
+                rename_map,
+            )
 
     def remove_duplicate_rec_by_src(self, mode="first"):
         """
@@ -1579,21 +1531,18 @@ In this case, please set dist_in_data=True and read again."""
     def _remove_receiver_records(self, rec_list):
         """Remove named receivers consistently from all record types."""
         receiver_names = {str(receiver_name) for receiver_name in rec_list}
-        self.rec_points = self.rec_points.loc[
-            ~self.rec_points["staname"].astype(str).isin(receiver_names)
-        ].reset_index(drop=True)
-        if not self.rec_points_cs.empty:
-            remove_cs_mask = (
-                self.rec_points_cs["staname1"].astype(str).isin(receiver_names)
-                | self.rec_points_cs["staname2"].astype(str).isin(receiver_names)
+        for receiver_records, field_names in self._iter_receiver_fields():
+            if receiver_records.empty:
+                continue
+            name_col = field_names[0]
+            remove_mask = receiver_records[name_col].astype(str).isin(
+                receiver_names
             )
-            self.rec_points_cs = self.rec_points_cs.loc[
-                ~remove_cs_mask
-            ].reset_index(drop=True)
-        if not self.rec_points_cr.empty:
-            self.rec_points_cr = self.rec_points_cr.loc[
-                ~self.rec_points_cr["staname"].astype(str).isin(receiver_names)
-            ].reset_index(drop=True)
+            receiver_records.drop(
+                index=receiver_records.index[remove_mask],
+                inplace=True,
+            )
+            receiver_records.reset_index(drop=True, inplace=True)
 
     def remove_specified_recs(self, rec_list, **kwargs):
         """Remove specified receivers
@@ -2448,8 +2397,7 @@ In this case, please set dist_in_data=True and read again."""
 
     def generate_double_difference(self, type='cs', max_azi_gap=15, max_dist_gap=2.5,
                                     dd_weight='average', recalc_baz=False,
-                                    dis_type='dis_dif',
-                                    same_phase=True, **kwargs):
+                                    same_phase=True, dis_type='dis_dif', **kwargs):
         """
         Generate double difference data
 
@@ -2463,6 +2411,8 @@ In this case, please set dist_in_data=True and read again."""
         :param dd_weight: Weighting method for double difference, options: ``average``, ``multiply``, defaults to ``average``
         :param recalc_baz: Recalculate azimuth and back azimuth, defaults to ``False``
         :type recalc_baz: bool, optional
+        :param same_phase: Only pair records with the same phase, defaults to ``True``
+        :type same_phase: bool, optional
         :param dis_type: Distance constraint type. ``"dis_dif"`` compares the
                          difference between the two source--receiver
                          epicentral distances. ``"dis_pair"`` compares the
@@ -2470,8 +2420,6 @@ In this case, please set dist_in_data=True and read again."""
                          and event--event separation for common-receiver
                          pairs, defaults to ``"dis_dif"``.
         :type dis_type: str, optional
-        :param same_phase: Only pair records with the same phase, defaults to ``True``
-        :type same_phase: bool, optional
 
         ``self.rec_points_cr`` or ``self.rec_points_cs`` are generated
         """
