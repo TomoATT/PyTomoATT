@@ -43,10 +43,15 @@ class TestSrcRec(unittest.TestCase):
             "evdp": [3.0],
         })
         sr.rec_points = pd.DataFrame({
-            "staname": ["STA_CONFLICT", "STA_CONFLICT", "STA_OK"],
-            "stla": [10.0, 10.1, 20.0],
-            "stlo": [30.0, 30.0, 40.0],
-            "stel": [0.0, 0.0, 0.0],
+            "staname": [
+                "STA_CONFLICT",
+                "STA_CONFLICT",
+                "STA_CONFLICT",
+                "STA_OK",
+            ],
+            "stla": [10.0, 10.0, 10.1, 20.0],
+            "stlo": [30.0, 30.0, 30.0, 40.0],
+            "stel": [0.0, 0.0, 0.0, 0.0],
         })
 
         with self.assertRaises(ValueError) as raised:
@@ -58,10 +63,12 @@ class TestSrcRec(unittest.TestCase):
         self.assertIn("stla", message)
         self.assertIn("stlo", message)
         self.assertIn("stel", message)
+        self.assertIn("count", message)
         self.assertIn("STA_CONFLICT", message)
         self.assertIn("10.0", message)
         self.assertIn("10.1", message)
         self.assertIn("30.0", message)
+        self.assertIn("2", message)
 
     def test_remove_conflicting_receivers_removes_all_record_types(self):
         sr = SrcRec("unused")
@@ -162,6 +169,89 @@ class TestSrcRec(unittest.TestCase):
             sr.receivers["staname"].tolist(),
             ["STA_CONFLICT_A", "STA_CONFLICT_B"],
         )
+
+    def test_max_count_conflicting_receivers_removes_other_locations(self):
+        sr = SrcRec("unused")
+        sr.src_points = pd.DataFrame({
+            "event_id": ["EVENT_0", "EVENT_1"],
+            "evla": [1.0, 2.0],
+            "evlo": [3.0, 4.0],
+            "evdp": [5.0, 6.0],
+            "num_rec": [3, 1],
+        })
+        sr.rec_points = pd.DataFrame({
+            "src_index": [0, 1],
+            "staname": ["STA_CONFLICT", "STA_CONFLICT"],
+            "stla": [10.0, 20.0],
+            "stlo": [30.0, 40.0],
+            "stel": [100.0, 200.0],
+        })
+        sr.rec_points_cs = pd.DataFrame({
+            "src_index": [0],
+            "staname1": ["STA_CONFLICT"],
+            "stla1": [10.0],
+            "stlo1": [30.0],
+            "stel1": [100.0],
+            "staname2": ["STA_CS"],
+            "stla2": [0.0],
+            "stlo2": [0.0],
+            "stel2": [0.0],
+        })
+        sr.rec_points_cr = pd.DataFrame({
+            "src_index": [0],
+            "event_id2": ["EVENT_1"],
+            "evla2": [2.0],
+            "evlo2": [4.0],
+            "evdp2": [6.0],
+            "staname": ["STA_CONFLICT"],
+            "stla": [10.0],
+            "stlo": [30.0],
+            "stel": [100.0],
+        })
+
+        sr.update_unique_src_rec(conflicting_receiver_action="max_count")
+
+        expected = np.array([10.0, 30.0, 100.0])
+        self.assertEqual(sr.rec_points["staname"].tolist(), ["STA_CONFLICT"])
+        self.assertTrue(
+            np.allclose(
+                sr.rec_points.loc[0, ["stla", "stlo", "stel"]]
+                .to_numpy(dtype=float),
+                expected,
+            )
+        )
+        self.assertEqual(sr.rec_points_cs.shape[0], 1)
+        self.assertTrue(
+            np.allclose(
+                sr.rec_points_cs.loc[0, ["stla1", "stlo1", "stel1"]]
+                .to_numpy(dtype=float),
+                expected,
+            )
+        )
+        self.assertEqual(sr.rec_points_cr.shape[0], 1)
+        self.assertTrue(
+            np.allclose(
+                sr.rec_points_cr.loc[0, ["stla", "stlo", "stel"]]
+                .to_numpy(dtype=float),
+                expected,
+            )
+        )
+        self.assertEqual(
+            sr.receivers[sr.receivers["staname"] == "STA_CONFLICT"].shape[0],
+            1,
+        )
+
+    def test_normalize_phase_labels_corrects_pg_pn_case(self):
+        sr = SrcRec("unused")
+        sr.rec_points = pd.DataFrame({"phase": ["PG", "PN", "P"]})
+        sr.rec_points_cs = pd.DataFrame({"phase": ["PG,cs", "PN,cs"]})
+        sr.rec_points_cr = pd.DataFrame({"phase": ["PG,cr", "PN,cr"]})
+
+        sr._normalize_phase_labels()
+
+        self.assertEqual(sr.rec_points["phase"].tolist(), ["Pg", "Pn", "P"])
+        self.assertEqual(sr.rec_points_cs["phase"].tolist(), ["Pg,cs", "Pn,cs"])
+        self.assertEqual(sr.rec_points_cr["phase"].tolist(), ["Pg,cr", "Pn,cr"])
 
     def test_read_accepts_conflicting_receiver_action(self):
         src_rec_data = """\
@@ -271,6 +361,80 @@ class TestSrcRec(unittest.TestCase):
         sr = SrcRec.read(self.fname)
         sr.generate_double_difference('cs', max_azi_gap=15, max_dist_gap=1.4)
         sr.generate_double_difference('cr', max_azi_gap=15, max_dist_gap=0.01)
+
+    def test_generate_double_difference_dis_type(self):
+        sr_cs = SrcRec("unused")
+        sr_cs.src_points = pd.DataFrame(
+            {
+                "evla": [0.0],
+                "evlo": [0.0],
+                "evdp": [1.0],
+                "event_id": ["E0"],
+                "weight": [1.0],
+            },
+            index=pd.Index([0], name="src_index"),
+        )
+        sr_cs.rec_points = pd.DataFrame(
+            {
+                "src_index": [0, 0],
+                "rec_index": [0, 1],
+                "staname": ["STA_E", "STA_W"],
+                "stla": [0.0, 0.0],
+                "stlo": [1.0, -1.0],
+                "stel": [0.0, 0.0],
+                "phase": ["P", "P"],
+                "tt": [1.0, 2.0],
+                "weight": [1.0, 1.0],
+            }
+        )
+        sr_cs.calc_distaz()
+
+        sr_cs._generate_cs(200.0, 0.1, dis_type="dis_dif")
+        self.assertEqual(sr_cs.rec_points_cs.shape[0], 1)
+        sr_cs._generate_cs(200.0, 0.1, dis_type="dis_pair")
+        self.assertEqual(sr_cs.rec_points_cs.shape[0], 0)
+
+        sr_cr = SrcRec("unused")
+        sr_cr.src_points = pd.DataFrame(
+            {
+                "evla": [1.0, -1.0],
+                "evlo": [0.0, 0.0],
+                "evdp": [1.0, 1.0],
+                "event_id": ["E0", "E1"],
+                "weight": [1.0, 1.0],
+            },
+            index=pd.Index([0, 1], name="src_index"),
+        )
+        sr_cr.rec_points = pd.DataFrame(
+            {
+                "src_index": [0, 1],
+                "rec_index": [0, 0],
+                "staname": ["STA", "STA"],
+                "stla": [0.0, 0.0],
+                "stlo": [0.0, 0.0],
+                "stel": [0.0, 0.0],
+                "phase": ["P", "P"],
+                "tt": [1.0, 2.0],
+                "weight": [1.0, 1.0],
+            }
+        )
+        sr_cr.receivers = pd.DataFrame(
+            {
+                "staname": ["STA"],
+                "stla": [0.0],
+                "stlo": [0.0],
+                "stel": [0.0],
+            }
+        )
+        sr_cr.calc_distaz()
+
+        sr_cr._generate_cr(200.0, 0.1, dis_type="dis_dif")
+        self.assertEqual(sr_cr.rec_points_cr.shape[0], 1)
+        sr_cr._generate_cr(200.0, 0.1, dis_type="dis_pair")
+        self.assertEqual(sr_cr.rec_points_cr.shape[0], 0)
+
+        with self.assertRaisesRegex(ValueError, "dis_type"):
+            sr_cr.generate_double_difference(dis_type="bad")
 
     def test_subcase_10(self):
         sr = SrcRec.read(self.fname)
