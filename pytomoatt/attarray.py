@@ -41,6 +41,14 @@ class Dataset(xarray.Dataset):
             raise ValueError('Error field name of {}'.format(field))
         # resample self of xarray with given interval of ``samp_interval``
 
+        if rotate is not None:
+            try:    # rotate reversely, from computational grid to physical grid
+                central_lat, central_lon, rotation_angle = rotate
+            except (TypeError, ValueError):
+                raise ValueError(
+                    "rotate must be a 3-item sequence: [central_lat, central_lon, rotation_angle]"
+                )
+
         if isinstance(samp_interval, (list, tuple, np.ndarray)):
             if len(samp_interval) != 2:
                 raise ValueError(
@@ -66,11 +74,31 @@ class Dataset(xarray.Dataset):
         idx = np.where(resampled.coords['dep'].values == depth)[0]
         if idx.size > 0:
             offset = 0
-            data = np.zeros([resampled.coords['lat'].size*resampled.coords['lon'].size, 3])
-            for i, la in enumerate(resampled.coords['lat'].values):
-                for j, lo in enumerate(resampled.coords['lon'].values):
-                    data[offset] = [lo, la, resampled.data_vars[field].values[idx[0], i, j]]
-                    offset += 1
+            if (rotate is not None) and ((field == "xi") or (field == "eta") or ((field == "phi"))):
+                # need do rotation correction, phi -> phi - rotation_angle
+                data_phi = resampled.data_vars["phi"].values[idx[0], :, :] - rotation_angle
+                data_xi  = resampled.data_vars["epsilon"].values[idx[0], :, :] * np.cos(2*np.deg2rad(data_phi))
+                data_eta = resampled.data_vars["epsilon"].values[idx[0], :, :] * np.sin(2*np.deg2rad(data_phi))
+
+                if field == "xi":
+                    data_array = data_xi
+                elif field == "eta":
+                    data_array = data_eta
+                else:  # field == "phi"
+                    data_array = data_phi
+
+                data = np.zeros([resampled.coords['lat'].size*resampled.coords['lon'].size, 3])
+                for i, la in enumerate(resampled.coords['lat'].values):
+                    for j, lo in enumerate(resampled.coords['lon'].values):
+                        data[offset] = [lo, la, data_array[i, j]]
+                        offset += 1
+
+            else:
+                data = np.zeros([resampled.coords['lat'].size*resampled.coords['lon'].size, 3])
+                for i, la in enumerate(resampled.coords['lat'].values):
+                    for j, lo in enumerate(resampled.coords['lon'].values):
+                        data[offset] = [lo, la, resampled.data_vars[field].values[idx[0], i, j]]
+                        offset += 1
         else:
             rad = 6371 - depth
             points = np.zeros([resampled.coords['lat'].size*resampled.coords['lon'].size, 4])
@@ -79,23 +107,44 @@ class Dataset(xarray.Dataset):
                 for _, lo in enumerate(resampled.coords['lon'].values):
                     points[offset] = [rad, la, lo, 0.]
                     offset += 1
-            points[:, 3] = interpn(
-                (resampled.coords['rad'].values, 
-                resampled.coords['lat'].values, 
-                resampled.coords['lon'].values),
-                resampled.data_vars[field].values,
-                points[:, 0:3]
-            )
+
+            if (rotate is not None) and ((field == "xi") or (field == "eta") or ((field == "phi"))):
+                # need do rotation correction, phi -> phi - rotation_angle
+                data_phi = interpn(
+                    (resampled.coords['rad'].values, 
+                    resampled.coords['lat'].values, 
+                    resampled.coords['lon'].values),
+                    resampled.data_vars["phi"].values,
+                    points[:, 0:3]
+                ) - rotation_angle
+                data_epsilon = interpn(
+                    (resampled.coords['rad'].values, 
+                    resampled.coords['lat'].values, 
+                    resampled.coords['lon'].values),
+                    resampled.data_vars["epsilon"].values,
+                    points[:, 0:3]
+                )
+                data_xi  = data_epsilon * np.cos(2*np.deg2rad(data_phi))
+                data_eta = data_epsilon * np.sin(2*np.deg2rad(data_phi))
+
+                if field == "xi":
+                    points[:, 3] = data_xi
+                elif field == "eta":
+                    points[:, 3] = data_eta
+                else:  # field == "phi"
+                    points[:, 3] = data_phi
+            else:
+                points[:, 3] = interpn(
+                    (resampled.coords['rad'].values, 
+                    resampled.coords['lat'].values, 
+                    resampled.coords['lon'].values),
+                    resampled.data_vars[field].values,
+                    points[:, 0:3]
+                )
             data = points[:, [2, 1, 3]]
 
         if rotate is not None:
-            try:    # rotate reversely, from computational grid to physical grid
-                central_lat, central_lon, rotation_angle = rotate
-                data[:, 1], data[:, 0] = rtp_rotation_reverse(data[:, 1], data[:, 0], central_lat, central_lon, rotation_angle)
-            except (TypeError, ValueError):
-                raise ValueError(
-                    "rotate must be a 3-item sequence: [central_lat, central_lon, rotation_angle]"
-                )
+            data[:, 1], data[:, 0] = rtp_rotation_reverse(data[:, 1], data[:, 0], central_lat, central_lon, rotation_angle)
 
         return data
     
@@ -140,18 +189,21 @@ class Dataset(xarray.Dataset):
                 "rotate must be provided when output_type is 'phy'"
             )
 
-        # rotate input coordinates to computational coordinates if input_type is "phy"
-        if input_type == "phy":
-            try:
+        if rotate is not None:
+            try:    # rotate reversely, from computational grid to physical grid
                 central_lat, central_lon, rotation_angle = rotate
-                new_start_point = np.zeros(2)
-                new_end_point = np.zeros(2)
-                new_start_point[1], new_start_point[0] = rtp_rotation(start_point[1], start_point[0], central_lat, central_lon, rotation_angle)
-                new_end_point[1], new_end_point[0] = rtp_rotation(end_point[1], end_point[0], central_lat, central_lon, rotation_angle)
             except (TypeError, ValueError):
                 raise ValueError(
                     "rotate must be a 3-item sequence: [central_lat, central_lon, rotation_angle]"
                 )
+
+
+        # rotate input coordinates to computational coordinates if input_type is "phy"
+        if input_type == "phy":
+            new_start_point = np.zeros(2)
+            new_end_point = np.zeros(2)
+            new_start_point[1], new_start_point[0] = rtp_rotation(start_point[1], start_point[0], central_lat, central_lon, rotation_angle)
+            new_end_point[1], new_end_point[0] = rtp_rotation(end_point[1], end_point[0], central_lat, central_lon, rotation_angle)
         else:
             new_start_point = start_point
             new_end_point = end_point
@@ -188,13 +240,6 @@ class Dataset(xarray.Dataset):
 
         # rotate reversely, from computational grid to physical grid
         if output_type == "phy":
-            try:    
-                central_lat, central_lon, rotation_angle = rotate
-                data[:, 1], data[:, 0] = rtp_rotation_reverse(data[:, 1], data[:, 0], central_lat, central_lon, rotation_angle)
-            except (TypeError, ValueError):
-                raise ValueError(
-                    "rotate must be a 3-item sequence: [central_lat, central_lon, rotation_angle]"
-                )
-
+            data[:, 1], data[:, 0] = rtp_rotation_reverse(data[:, 1], data[:, 0], central_lat, central_lon, rotation_angle)
         
         return data
