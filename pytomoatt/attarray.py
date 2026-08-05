@@ -123,39 +123,73 @@ class Dataset(xarray.Dataset):
                     points[offset] = [rad, la, lo, 0.]
                     offset += 1
 
-            if (rotate is not None) and ((field == "xi") or (field == "eta") or ((field == "phi"))):
-                # need do rotation correction, phi -> phi - rotation_angle
-                data_phi = interpn(
-                    (resampled.coords['rad'].values, 
-                    resampled.coords['lat'].values, 
-                    resampled.coords['lon'].values),
-                    resampled.data_vars["phi"].values,
-                    points[:, 0:3]
-                ) - rotation_angle
-                data_epsilon = interpn(
-                    (resampled.coords['rad'].values, 
-                    resampled.coords['lat'].values, 
-                    resampled.coords['lon'].values),
-                    resampled.data_vars["epsilon"].values,
-                    points[:, 0:3]
-                )
-                data_xi  = data_epsilon * np.cos(2*np.deg2rad(data_phi))
-                data_eta = data_epsilon * np.sin(2*np.deg2rad(data_phi))
 
-                if field == "xi":
-                    points[:, 3] = data_xi
-                elif field == "eta":
-                    points[:, 3] = data_eta
-                else:  # field == "phi"
-                    points[:, 3] = data_phi
+            # Angle can not be interpolated directly, 0 degree and 180 degree are the same. But the interpolation will give 90 degree.
+            if (rotate is not None):
+                if ((field == "xi") or (field == "eta") or ((field == "phi"))):
+                    data_xi = interpn(
+                        (resampled.coords['rad'].values, 
+                        resampled.coords['lat'].values, 
+                        resampled.coords['lon'].values),
+                        resampled.data_vars["xi"].values,
+                        points[:, 0:3]
+                    )
+                    data_eta = interpn(
+                        (resampled.coords['rad'].values, 
+                        resampled.coords['lat'].values, 
+                        resampled.coords['lon'].values),
+                        resampled.data_vars["eta"].values,
+                        points[:, 0:3]
+                    )
+                    data_phi = np.rad2deg(0.5*np.arctan2(data_eta, data_xi)) - rotation_angle   # need rotation correction, phi -> phi - rotation_angle
+                    data_epsilon = np.sqrt(data_xi**2 + data_eta**2)
+    
+                    data_xi = data_epsilon * np.cos(2*np.deg2rad(data_phi))
+                    data_eta = data_epsilon * np.sin(2*np.deg2rad(data_phi))
+
+                    if field == "xi":
+                        points[:, 3] = data_xi
+                    elif field == "eta":
+                        points[:, 3] = data_eta
+                    else:  # field == "phi"
+                        points[:, 3] = data_phi
+                else:   # field = "vel"， dlnv, epsilon
+                    points[:, 3] = interpn(
+                        (resampled.coords['rad'].values, 
+                        resampled.coords['lat'].values, 
+                        resampled.coords['lon'].values),
+                        resampled.data_vars[field].values,
+                        points[:, 0:3]
+                    )
+
+            # when rotate is not None, only "phi" need special treatment
             else:
-                points[:, 3] = interpn(
-                    (resampled.coords['rad'].values, 
-                    resampled.coords['lat'].values, 
-                    resampled.coords['lon'].values),
-                    resampled.data_vars[field].values,
-                    points[:, 0:3]
-                )
+                if (field == "phi"):
+                    data_xi = interpn(
+                        (resampled.coords['rad'].values, 
+                        resampled.coords['lat'].values, 
+                        resampled.coords['lon'].values),
+                        resampled.data_vars["xi"].values,
+                        points[:, 0:3]
+                    )
+                    data_eta = interpn(
+                        (resampled.coords['rad'].values, 
+                        resampled.coords['lat'].values, 
+                        resampled.coords['lon'].values),
+                        resampled.data_vars["eta"].values,
+                        points[:, 0:3]
+                    )
+                    data_phi = np.rad2deg(0.5*np.arctan2(data_eta, data_xi))
+                    points[:, 3] = data_phi
+                else:
+                    points[:, 3] = interpn(
+                        (resampled.coords['rad'].values, 
+                        resampled.coords['lat'].values, 
+                        resampled.coords['lon'].values),
+                        resampled.data_vars[field].values,
+                        points[:, 0:3]
+                    )
+           
             data = points[:, [2, 1, 3]]
 
         if rotate is not None:
@@ -273,14 +307,88 @@ class Dataset(xarray.Dataset):
                 offset += 1
 
         # Interpolation
-        points[:, 4] = interpn(
-            (self.coords['rad'].values, 
-            self.coords['lat'].values, 
-            self.coords['lon'].values),
-            self.data_vars[field].values,
-            points[:, 0:3],
-            bounds_error=False
-        )
+        # points[:, 4] = interpn(
+        #     (self.coords['rad'].values, 
+        #     self.coords['lat'].values, 
+        #     self.coords['lon'].values),
+        #     self.data_vars[field].values,
+        #     points[:, 0:3],
+        #     bounds_error=False
+        # )
+
+        # Angle can not be interpolated directly, 0 degree and 180 degree are the same. But the interpolation will give 90 degree.
+        if (output_coord_type == "phy"):
+            if ((field == "xi") or (field == "eta") or ((field == "phi"))):
+                data_xi = interpn(
+                    (self.coords['rad'].values, 
+                    self.coords['lat'].values, 
+                    self.coords['lon'].values),
+                    self.data_vars["xi"].values,
+                    points[:, 0:3],
+                    bounds_error=False
+                )
+                data_eta = interpn(
+                    (self.coords['rad'].values, 
+                    self.coords['lat'].values, 
+                    self.coords['lon'].values),
+                    self.data_vars["eta"].values,
+                    points[:, 0:3],
+                    bounds_error=False
+                )
+                data_phi = np.rad2deg(0.5*np.arctan2(data_eta, data_xi)) - rotation_angle   # need rotation correction, phi -> phi - rotation_angle
+                data_epsilon = np.sqrt(data_xi**2 + data_eta**2)
+
+                data_xi = data_epsilon * np.cos(2*np.deg2rad(data_phi))
+                data_eta = data_epsilon * np.sin(2*np.deg2rad(data_phi))
+
+                if field == "xi":
+                    points[:, 4] = data_xi
+                elif field == "eta":
+                    points[:, 4] = data_eta
+                else:  # field == "phi"
+                    points[:, 4] = data_phi
+            else:   # field = "vel"， dlnv, epsilon
+                points[:, 4] = interpn(
+                    (self.coords['rad'].values, 
+                    self.coords['lat'].values, 
+                    self.coords['lon'].values),
+                    self.data_vars[field].values,
+                    points[:, 0:3],
+                    bounds_error=False
+                )
+
+        # when rotate is not None, only "phi" need special treatment
+        else:
+            if (field == "phi"):
+                data_xi = interpn(
+                    (self.coords['rad'].values, 
+                    self.coords['lat'].values, 
+                    self.coords['lon'].values),
+                    self.data_vars["xi"].values,
+                    points[:, 0:3],
+                    bounds_error=False
+                )
+                data_eta = interpn(
+                    (self.coords['rad'].values, 
+                    self.coords['lat'].values, 
+                    self.coords['lon'].values),
+                    self.data_vars["eta"].values,
+                    points[:, 0:3],
+                    bounds_error=False
+                )
+                data_phi = np.rad2deg(0.5*np.arctan2(data_eta, data_xi))
+                points[:, 4] = data_phi
+            else:
+                points[:, 4] = interpn(
+                    (self.coords['rad'].values, 
+                    self.coords['lat'].values, 
+                    self.coords['lon'].values),
+                    self.data_vars[field].values,
+                    points[:, 0:3],
+                    bounds_error=False
+                )
+
+
         points[:, 0] = _EARTH_RADIUS_KM - points[:, 0]
         data = points[:, [2, 1, 3, 0, 4]]
 
