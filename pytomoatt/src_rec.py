@@ -3,14 +3,27 @@ import tqdm
 import pandas as pd
 from .distaz import DistAZ
 from .setuplog import SetupLog
+from .utils import _EARTH_RADIUS_KM
 from .utils.src_rec_utils import define_rec_cols, setup_rec_points_dd, \
-                                 get_rec_points_types, update_position
+                                 get_rec_points_types, update_position, \
+                                 linear_regression as fit_linear_regression
 from sklearn.metrics.pairwise import haversine_distances
 import copy
 from io import StringIO
+from numbers import Real
 import os
+from urllib.parse import urlparse
 
 pd.options.mode.chained_assignment = None  # default='warn'
+
+
+_RECEIVER_COLUMNS = ("staname", "stla", "stlo", "stel")
+_RECEIVER_FIELD_SCHEMAS = (
+    ("rec_points", _RECEIVER_COLUMNS),
+    ("rec_points_cs", ("staname1", "stla1", "stlo1", "stel1")),
+    ("rec_points_cs", ("staname2", "stla2", "stlo2", "stel2")),
+    ("rec_points_cr", _RECEIVER_COLUMNS),
+)
 
 
 class SrcRec:
@@ -126,6 +139,8 @@ class SrcRec:
         ================ ===========================================================================
         ``netname``      Name of the network (when ``name_net_and_sta=True`` in ``SrcRec.read``)
         ``dist_deg``     Epicentral distance in deg (when ``dist_in_data=True`` in ``SrcRec.read``)
+        ``dist_km``      Epicentral distance in km
+        ``dist_3d_km``   Three-dimensional source--receiver distance in km
         ================ ===========================================================================
 
         """
@@ -215,9 +230,21 @@ class SrcRec:
             raise TypeError("rec_points_cr should be in DataFrame")
 
     @classmethod
-    def read(cls, fname: str, dist_in_data=False, name_net_and_sta=False, **kwargs):
+    def read(
+        cls,
+        fname: str,
+        dist_in_data=False,
+        name_net_and_sta=False,
+        conflicting_receiver_action="error",
+        **kwargs,
+    ):
         """
         Read source <--> receiver file to pandas.DataFrame
+
+        Source indices in the file are treated as local labels and may be
+        duplicated. Sources are reassigned consecutive ``src_index`` values
+        from zero in file order, and all receiver records are remapped to the
+        new indices using source blocks and unique event IDs.
 
         :param fname: Path to src_rec file
         :type fname: str
@@ -225,11 +252,40 @@ class SrcRec:
         :type dist_in_data: bool
         :param name_net_and_sta: Whether to include network and station name in the src_rec file
         :type name_net_and_sta: bool
+        :param conflicting_receiver_action: How to handle a receiver name that
+            has multiple coordinates/elevations. ``"error"`` lists every
+            conflicting receiver location and stops reading; ``"remove"``
+            removes all observations involving those receiver names;
+            ``"max_count"`` keeps the location with the highest occurrence
+            count and removes observations at other locations; and
+            ``"rename"`` keeps the locations and appends ``_A``, ``_B``, ...
+            to distinguish them.
+        :type conflicting_receiver_action: str
         :return: class of SrcRec
         :rtype: SrcRec
         """
+        valid_conflicting_receiver_actions = {
+            "error",
+            "remove",
+            "rename",
+            "max_count",
+        }
+        if conflicting_receiver_action not in valid_conflicting_receiver_actions:
+            raise ValueError(
+                "Invalid conflicting_receiver_action: "
+                f"{conflicting_receiver_action!r}. Supported actions are "
+                "'error', 'remove', 'rename', and 'max_count'."
+            )
+
         sr = cls(fname=fname, **kwargs)
-        if not os.path.exists(fname):
+        parsed_url = urlparse(str(fname))
+        is_remote = (
+            parsed_url.scheme in {"http", "https"}
+            and bool(parsed_url.netloc)
+        )
+        if os.path.exists(fname):
+            src_rec_data = fname
+        elif is_remote:
             sr.log.SrcReclog.info("Downloading src_rec file from {}".format(fname))
             try:
                 from .utils.src_rec_utils import download_src_rec_file
@@ -241,18 +297,47 @@ class SrcRec:
                 sr.log.SrcReclog.error("Failed to download src_rec file from {}".format(fname))
                 return sr
         else:
-            src_rec_data = fname 
+            raise FileNotFoundError(f"src_rec file not found: {fname}")
+
         alldf = pd.read_csv(
                 src_rec_data, sep=r"\s+", header=None, comment="#", low_memory=False, dtype={12: str}
             )
 
         last_col_src = 12
         dd_col = 11
-        # this is a source line if the last column is not NaN
-        # sr.src_points = alldf[pd.notna(alldf[last_col_src])]
-        sr.src_points = alldf[~(alldf[dd_col].astype(str).str.contains("cs")| \
-                                alldf[dd_col].astype(str).str.contains("cr")| \
-                                pd.isna(alldf[last_col_src]))]
+        source_mask = ~(
+            alldf[dd_col].astype(str).str.contains("cs")
+            | alldf[dd_col].astype(str).str.contains("cr")
+            | pd.isna(alldf[last_col_src])
+        )
+        source_event_ids = alldf.loc[source_mask, last_col_src].astype(str)
+        duplicated_event_ids = source_event_ids[
+            source_event_ids.duplicated(keep=False)
+        ].unique()
+        if duplicated_event_ids.size:
+            raise ValueError(
+                "event_id must be unique; duplicated values: {}".format(
+                    ", ".join(duplicated_event_ids)
+                )
+            )
+
+        # File src_index values are not guaranteed to be unique. Assign each
+        # source block a new consecutive index and propagate it to all records
+        # belonging to that block before parsing the individual record types.
+        block_src_index = pd.Series(np.nan, index=alldf.index)
+        block_src_index.loc[source_mask] = np.arange(source_mask.sum())
+        block_src_index = block_src_index.ffill()
+        if block_src_index.isna().any():
+            raise ValueError(
+                "Receiver data found before the first source record"
+            )
+        alldf.loc[:, 0] = block_src_index.astype(int)
+
+        event_id_to_src_index = dict(zip(
+            source_event_ids,
+            np.arange(source_mask.sum()),
+        ))
+        sr.src_points = alldf[source_mask]
         # add weight column if not included
         if sr.src_points.shape[1] == last_col_src + 1:
             # add another column for weight
@@ -377,6 +462,20 @@ In this case, please set dist_in_data=True and read again."""
             cols, data_type = setup_rec_points_dd(type='cr')
             sr.rec_points_cr.columns = cols
             sr.rec_points_cr = sr.rec_points_cr.astype(data_type)
+            if not sr.rec_points_cr.empty:
+                mapped_src_index2 = sr.rec_points_cr["event_id2"].map(
+                    event_id_to_src_index
+                )
+                if mapped_src_index2.isna().any():
+                    missing_event_ids = sr.rec_points_cr.loc[
+                        mapped_src_index2.isna(), "event_id2"
+                    ].unique()
+                    raise ValueError(
+                        "Unknown event_id2 in common-receiver data: {}".format(
+                            ", ".join(missing_event_ids)
+                        )
+                    )
+                sr.rec_points_cr["src_index2"] = mapped_src_index2.astype(int)
 
             # read common source data
             sr.rec_points_cs = alldf[
@@ -399,7 +498,10 @@ In this case, please set dist_in_data=True and read again."""
             sr.rec_points_cs.columns = cols
             sr.rec_points_cs = sr.rec_points_cs.astype(data_type)
 
-            sr.update_unique_src_rec()
+            sr._normalize_phase_labels()
+            sr.update_unique_src_rec(
+                conflicting_receiver_action=conflicting_receiver_action
+            )
         return sr
 
     def write(self, fname="src_rec_file"):
@@ -415,82 +517,181 @@ In this case, please set dist_in_data=True and read again."""
         rec_points_cs = self.rec_points_cs
         rec_points_cr = self.rec_points_cr
 
-        for src in tqdm.tqdm(
-            src_points.itertuples(),
+        # Pre-format receiver records by source so the source loop only
+        # performs dictionary lookups and writes complete string blocks.
+        rec_lines_by_src = {}
+        for row in zip(
+            rec_points["src_index"].to_numpy(),
+            rec_points["rec_index"].to_numpy(),
+            rec_points["staname"].to_numpy(),
+            rec_points["stla"].to_numpy(),
+            rec_points["stlo"].to_numpy(),
+            rec_points["stel"].to_numpy(),
+            rec_points["phase"].to_numpy(),
+            rec_points["tt"].to_numpy(),
+            rec_points["weight"].to_numpy(),
+        ):
+            (
+                src_index,
+                rec_index,
+                staname,
+                stla,
+                stlo,
+                stel,
+                phase,
+                tt,
+                weight,
+            ) = row
+            rec_lines_by_src.setdefault(src_index, []).append(
+                (
+                    f"{src_index:d} {rec_index:d} {staname!s:>6} "
+                    f"{stla:9.4f} {stlo:9.4f} {stel:9.4f} "
+                    f"{phase!s} {tt:8.4f} {weight:.4f}\n"
+                )
+            )
+        rec_lines_by_src = {
+            src_index: "".join(lines)
+            for src_index, lines in rec_lines_by_src.items()
+        }
+
+        rec_cs_lines_by_src = {}
+        if not rec_points_cs.empty:
+            for row in zip(
+                rec_points_cs["src_index"].to_numpy(),
+                rec_points_cs["rec_index1"].to_numpy(),
+                rec_points_cs["staname1"].to_numpy(),
+                rec_points_cs["stla1"].to_numpy(),
+                rec_points_cs["stlo1"].to_numpy(),
+                rec_points_cs["stel1"].to_numpy(),
+                rec_points_cs["rec_index2"].to_numpy(),
+                rec_points_cs["staname2"].to_numpy(),
+                rec_points_cs["stla2"].to_numpy(),
+                rec_points_cs["stlo2"].to_numpy(),
+                rec_points_cs["stel2"].to_numpy(),
+                rec_points_cs["phase"].to_numpy(),
+                rec_points_cs["tt"].to_numpy(),
+                rec_points_cs["weight"].to_numpy(),
+            ):
+                (
+                    src_index,
+                    rec_index1,
+                    staname1,
+                    stla1,
+                    stlo1,
+                    stel1,
+                    rec_index2,
+                    staname2,
+                    stla2,
+                    stlo2,
+                    stel2,
+                    phase,
+                    tt,
+                    weight,
+                ) = row
+                rec_cs_lines_by_src.setdefault(src_index, []).append(
+                    (
+                        f"{src_index:d} {rec_index1:d} "
+                        f"{staname1!s:>6} {stla1:9.4f} {stlo1:9.4f} "
+                        f"{stel1:9.4f} {rec_index2:d} {staname2!s:>6} "
+                        f"{stla2:9.4f} {stlo2:9.4f} {stel2:9.4f} "
+                        f"{phase!s} {tt:8.4f} {weight:.4f}\n"
+                    )
+                )
+            rec_cs_lines_by_src = {
+                src_index: "".join(lines)
+                for src_index, lines in rec_cs_lines_by_src.items()
+            }
+
+        rec_cr_lines_by_src = {}
+        if not rec_points_cr.empty:
+            for row in zip(
+                rec_points_cr["src_index"].to_numpy(),
+                rec_points_cr["rec_index"].to_numpy(),
+                rec_points_cr["staname"].to_numpy(),
+                rec_points_cr["stla"].to_numpy(),
+                rec_points_cr["stlo"].to_numpy(),
+                rec_points_cr["stel"].to_numpy(),
+                rec_points_cr["src_index2"].to_numpy(),
+                rec_points_cr["event_id2"].to_numpy(),
+                rec_points_cr["evla2"].to_numpy(),
+                rec_points_cr["evlo2"].to_numpy(),
+                rec_points_cr["evdp2"].to_numpy(),
+                rec_points_cr["phase"].to_numpy(),
+                rec_points_cr["tt"].to_numpy(),
+                rec_points_cr["weight"].to_numpy(),
+            ):
+                (
+                    src_index,
+                    rec_index,
+                    staname,
+                    stla,
+                    stlo,
+                    stel,
+                    src_index2,
+                    event_id2,
+                    evla2,
+                    evlo2,
+                    evdp2,
+                    phase,
+                    tt,
+                    weight,
+                ) = row
+                rec_cr_lines_by_src.setdefault(src_index, []).append(
+                    (
+                        f"{src_index:d} {rec_index:d} {staname!s:>6} "
+                        f"{stla:9.4f} {stlo:9.4f} {stel:9.4f} "
+                        f"{src_index2:d} {event_id2!s:>6} "
+                        f"{evla2:9.4f} {evlo2:9.4f} {evdp2:9.4f} "
+                        f"{phase!s} {tt:8.4f} {weight:.4f}\n"
+                    )
+                )
+            rec_cr_lines_by_src = {
+                src_index: "".join(lines)
+                for src_index, lines in rec_cr_lines_by_src.items()
+            }
+
+        source_columns = [
+            "origin_time",
+            "evla",
+            "evlo",
+            "evdp",
+            "mag",
+            "num_rec",
+            "event_id",
+            "weight",
+        ]
+        source_rows = src_points[source_columns].itertuples(name=None)
+        for row in tqdm.tqdm(
+            source_rows,
             total=src_points.shape[0],
             desc="Writing src_rec file",
         ):
-            idx = src.Index
-            time_lst = (
-                src.origin_time.strftime("%Y_%m_%d_%H_%M_%S.%f").split("_")
+            (
+                idx,
+                origin_time,
+                evla,
+                evlo,
+                evdp,
+                mag,
+                num_rec,
+                event_id,
+                weight,
+            ) = row
+            time_fields = " ".join(
+                origin_time.strftime("%Y_%m_%d_%H_%M_%S.%f").split("_")
             )
-            output.write("{:d} {} {} {} {} {} {} {:.4f} {:.4f} {:.4f} {:.4f} {} {} {:.4f}\n".format(
-                    idx,
-                    *time_lst,
-                    src.evla,
-                    src.evlo,
-                    src.evdp,
-                    src.mag,
-                    src.num_rec,
-                    src.event_id,
-                    src.weight,
-                ))
+            output.write(
+                f"{idx:d} {time_fields} {evla:.4f} {evlo:.4f} "
+                f"{evdp:.4f} {mag:.4f} {num_rec} {event_id} "
+                f"{weight:.4f}\n"
+            )
 
             if self.src_only:
                 continue
 
-            rec_data = rec_points[rec_points["src_index"] == idx]
-            for rec in rec_data.itertuples():
-                output.write("   {:d} {:d} {} {:6.4f} {:6.4f} {:6.4f} {} {:6.4f} {:6.4f}\n".format(
-                        idx,
-                        rec.rec_index,
-                        rec.staname,
-                        rec.stla,
-                        rec.stlo,
-                        rec.stel,
-                        rec.phase,
-                        rec.tt,
-                        rec.weight,
-                    ))
-
-            if not rec_points_cs.empty:
-                rec_data = rec_points_cs[rec_points_cs["src_index"] == idx]
-                for rec in rec_data.itertuples():
-                    output.write("   {:d} {:d} {} {:6.4f} {:6.4f} {:6.4f} {:d} {} {:6.4f} {:6.4f} {:6.4f} {} {:.4f} {:6.4f}\n".format(
-                            idx,
-                            rec.rec_index1,
-                            rec.staname1,
-                            rec.stla1,
-                            rec.stlo1,
-                            rec.stel1,
-                            rec.rec_index2,
-                            rec.staname2,
-                            rec.stla2,
-                            rec.stlo2,
-                            rec.stel2,
-                            rec.phase,
-                            rec.tt,
-                            rec.weight,
-                        ))
-            if not rec_points_cr.empty:
-                rec_data = rec_points_cr[rec_points_cr["src_index"] == idx]
-                for rec in rec_data.itertuples():
-                    output.write("   {:d} {:d} {} {:6.4f} {:6.4f} {:6.4f} {:d} {} {:6.4f} {:6.4f} {:6.4f} {} {:.4f} {:6.4f}\n".format(
-                            idx,
-                            rec.rec_index,
-                            rec.staname,
-                            rec.stla,
-                            rec.stlo,
-                            rec.stel,
-                            rec.src_index2,
-                            rec.event_id2,
-                            rec.evla2,
-                            rec.evlo2,
-                            rec.evdp2,
-                            rec.phase,
-                            rec.tt,
-                            rec.weight,
-                        ))
+            output.write(rec_lines_by_src.get(idx, ""))
+            output.write(rec_cs_lines_by_src.get(idx, ""))
+            output.write(rec_cr_lines_by_src.get(idx, ""))
         with open(fname, "w") as f:
             f.write(output.getvalue())
 
@@ -502,14 +703,61 @@ In this case, please set dist_in_data=True and read again."""
         :rtype: SrcRec
         """
         return copy.deepcopy(self)
+
+    @staticmethod
+    def _normalize_phase_value(phase):
+        """Normalize known phase label variants while preserving DD suffixes."""
+        if not isinstance(phase, str):
+            return phase
+        if "," in phase:
+            base_phase, suffix = phase.split(",", 1)
+            suffix = f",{suffix}"
+        else:
+            base_phase = phase
+            suffix = ""
+        phase_map = {
+            "PG": "Pg",
+            "PN": "Pn",
+            "PB": "Pb",
+            "SG": "Sg",
+            "SN": "Sn",
+            "SB": "Sb",
+        }
+        return f"{phase_map.get(base_phase, base_phase)}{suffix}"
+
+    def _normalize_phase_labels(self):
+        """Normalize phase labels in absolute and double-difference records."""
+        for records in (self.rec_points, self.rec_points_cs, self.rec_points_cr):
+            if not records.empty and "phase" in records:
+                records.loc[:, "phase"] = records["phase"].map(
+                    self._normalize_phase_value
+                )
     
-    def update_unique_src_rec(self):
+    def update_unique_src_rec(self, conflicting_receiver_action="error"):
         """
         Update unique sources and receivers
 
         The unique sources and receivers are stored 
         in ``SrcRec.sources`` and ``SrcRec.receivers`` respectively.
+
+        :param conflicting_receiver_action: How to handle receiver names with
+            multiple coordinates/elevations. ``"error"`` raises a
+            :class:`ValueError` containing all conflicting locations;
+            ``"remove"`` removes all observations involving those names;
+            ``"max_count"`` keeps the location with the highest occurrence
+            count and removes observations at other locations; and
+            ``"rename"`` appends ``_A``, ``_B``, ... to each distinct
+            location.
+        :type conflicting_receiver_action: str
         """
+        valid_actions = {"error", "remove", "rename", "max_count"}
+        if conflicting_receiver_action not in valid_actions:
+            raise ValueError(
+                "Invalid conflicting_receiver_action: "
+                f"{conflicting_receiver_action!r}. Supported actions are "
+                "'error', 'remove', 'rename', and 'max_count'."
+            )
+
         # get sources
         src_col = ["event_id", "evla", "evlo", "evdp"]
         sources = self.src_points[src_col].values
@@ -532,24 +780,72 @@ In this case, please set dist_in_data=True and read again."""
 
         # get receivers
         rec_col = ["staname", "stla", "stlo", "stel"]
-        receivers = self.rec_points[rec_col].values
-        if not self.rec_points_cs.empty:
-            receivers = np.vstack(
-                [receivers, self.rec_points_cs[
-                ["staname1", "stla1", "stlo1", "stel1"]
-            ].values])
-            receivers = np.vstack(
-                [receivers, self.rec_points_cs[
-                ["staname2", "stla2", "stlo2", "stel2"]
-            ].values])
-        if not self.rec_points_cr.empty:
-            receivers = np.vstack(
-                [receivers, self.rec_points_cr[
-                ["staname", "stla", "stlo", "stel"]
-            ].values])
-        self.receivers = pd.DataFrame(
-            receivers, columns=rec_col
-        ).drop_duplicates(ignore_index=True)
+        receiver_rows = self._collect_receiver_rows()
+        conflicting_receiver_mask = receiver_rows.duplicated(
+            subset="staname", keep=False
+        )
+        conflicting_receiver_names = receiver_rows.loc[
+            conflicting_receiver_mask, "staname"
+        ].drop_duplicates().astype(str).tolist()
+        if conflicting_receiver_names:
+            conflicting_receiver_details = receiver_rows.loc[
+                conflicting_receiver_mask, rec_col + ["count"]
+            ].sort_values(rec_col, kind="stable")
+            conflict_message = (
+                "Found conflicting coordinates/elevations for "
+                f"{len(conflicting_receiver_names)} receiver(s):\n"
+                f"{conflicting_receiver_details.to_string(index=False)}"
+            )
+
+            if conflicting_receiver_action == "error":
+                self.log.SrcReclog.error(conflict_message)
+                raise ValueError(conflict_message)
+
+            if conflicting_receiver_action == "remove":
+                self.log.SrcReclog.warning(
+                    f"{conflict_message}\nRemoving all observations involving these receivers."
+                )
+                self._remove_receiver_records(conflicting_receiver_names)
+                self.update_num_rec()
+            elif conflicting_receiver_action == "max_count":
+                keep_map = self._build_max_count_receiver_location_map(
+                    receiver_rows,
+                    conflicting_receiver_names,
+                )
+                self._remove_receiver_records_except_locations(keep_map)
+                self.update_num_rec()
+                kept_receivers = pd.DataFrame(
+                    [
+                        {
+                            "staname": name,
+                            "stla": latitude,
+                            "stlo": longitude,
+                            "stel": elevation,
+                        }
+                        for name, (latitude, longitude, elevation)
+                        in keep_map.items()
+                    ]
+                ).to_string(index=False)
+                self.log.SrcReclog.warning(
+                    f"{conflict_message}\n"
+                    "Kept max-count receiver locations and removed "
+                    f"other conflicting locations:\n{kept_receivers}"
+                )
+            else:
+                rename_map = self._build_conflicting_receiver_rename_map(
+                    receiver_rows,
+                    conflicting_receiver_names,
+                )
+                self._rename_receiver_records(rename_map)
+                renamed_receivers = ", ".join(rename_map.values())
+                self.log.SrcReclog.warning(
+                    f"{conflict_message}\nRenamed conflicting receiver locations as: "
+                    f"{renamed_receivers}."
+                )
+
+            receiver_rows = self._collect_receiver_rows()
+
+        self.receivers = receiver_rows.loc[:, rec_col].reset_index(drop=True)
         self.receivers = self.receivers.astype(
             {
                 "stla": float,
@@ -558,6 +854,156 @@ In this case, please set dist_in_data=True and read again."""
             }
         )
         self.receivers.index = np.arange(len(self.receivers))
+
+    def _collect_receiver_rows(self):
+        """Collect distinct receiver names and locations from all record types."""
+        receiver_frames = []
+        for receiver_records, field_names in self._iter_receiver_fields():
+            if receiver_records.empty:
+                continue
+            receiver_frame = receiver_records.loc[:, field_names].copy()
+            receiver_frame.columns = _RECEIVER_COLUMNS
+            receiver_frames.append(receiver_frame)
+
+        if not receiver_frames:
+            return pd.DataFrame(columns=(*_RECEIVER_COLUMNS, "count"))
+
+        return (
+            pd.concat(receiver_frames, ignore_index=True)
+            .groupby(list(_RECEIVER_COLUMNS), as_index=False, sort=False)
+            .size()
+            .rename(columns={"size": "count"})
+        )
+
+    def _iter_receiver_fields(self):
+        """Yield each receiver record table and its location field names."""
+        for records_attribute, field_names in _RECEIVER_FIELD_SCHEMAS:
+            yield getattr(self, records_attribute), field_names
+
+    @staticmethod
+    def _build_max_count_receiver_location_map(
+        receiver_rows,
+        conflicting_receiver_names,
+    ):
+        """Map each conflicting receiver name to its highest-count location."""
+        keep_map = {}
+        for receiver_name in conflicting_receiver_names:
+            locations = receiver_rows.loc[
+                receiver_rows["staname"].astype(str) == receiver_name,
+                ["stla", "stlo", "stel", "count"],
+            ]
+            max_count_index = locations["count"].idxmax()
+            keep_location = locations.loc[max_count_index]
+            keep_map[receiver_name] = (
+                keep_location["stla"],
+                keep_location["stlo"],
+                keep_location["stel"],
+            )
+        return keep_map
+
+    @staticmethod
+    def _remove_receiver_records_except_location(
+        receiver_records,
+        name_col,
+        latitude_col,
+        longitude_col,
+        elevation_col,
+        keep_map,
+    ):
+        """Remove conflicting receiver records except the chosen location."""
+        if receiver_records.empty:
+            return
+        keep = pd.Series(True, index=receiver_records.index, dtype=bool)
+        receiver_names = receiver_records[name_col].astype(str)
+        for receiver_name, (latitude, longitude, elevation) in keep_map.items():
+            name_mask = receiver_names == receiver_name
+            keep_location_mask = (
+                (receiver_records[latitude_col] == latitude)
+                & (receiver_records[longitude_col] == longitude)
+                & (receiver_records[elevation_col] == elevation)
+            )
+            keep &= ~name_mask | keep_location_mask
+        receiver_records.drop(index=receiver_records.index[~keep], inplace=True)
+        receiver_records.reset_index(drop=True, inplace=True)
+
+    def _remove_receiver_records_except_locations(self, keep_map):
+        """Remove non-max-count receiver locations from all record types."""
+        for receiver_records, field_names in self._iter_receiver_fields():
+            self._remove_receiver_records_except_location(
+                receiver_records,
+                *field_names,
+                keep_map,
+            )
+
+    @staticmethod
+    def _receiver_alphabetic_suffix(index):
+        """Convert a zero-based index to A, B, ..., Z, AA, AB, ... ."""
+        suffix = ""
+        index += 1
+        while index:
+            index, remainder = divmod(index - 1, 26)
+            suffix = chr(ord("A") + remainder) + suffix
+        return suffix
+
+    def _build_conflicting_receiver_rename_map(
+        self,
+        receiver_rows,
+        conflicting_receiver_names,
+    ):
+        """Map each conflicting name/location tuple to a unique suffixed name."""
+        rename_map = {}
+        used_names = set(receiver_rows["staname"].astype(str))
+        for receiver_name in conflicting_receiver_names:
+            locations = receiver_rows.loc[
+                receiver_rows["staname"].astype(str) == receiver_name,
+                ["stla", "stlo", "stel"],
+            ]
+            suffix_index = 0
+            for location in locations.itertuples(index=False, name=None):
+                while True:
+                    suffix = self._receiver_alphabetic_suffix(suffix_index)
+                    suffix_index += 1
+                    renamed_receiver = f"{receiver_name}_{suffix}"
+                    if renamed_receiver not in used_names:
+                        break
+                used_names.add(renamed_receiver)
+                rename_map[(receiver_name, *location)] = renamed_receiver
+        return rename_map
+
+    @staticmethod
+    def _rename_receiver_column(
+        receiver_records,
+        name_col,
+        latitude_col,
+        longitude_col,
+        elevation_col,
+        rename_map,
+    ):
+        """Apply a receiver name/location mapping to one record column set."""
+        if receiver_records.empty:
+            return
+        conflicting_names = {key[0] for key in rename_map}
+        conflicting_mask = receiver_records[name_col].astype(str).isin(
+            conflicting_names
+        )
+        conflicting_locations = receiver_records.loc[
+            conflicting_mask,
+            [name_col, latitude_col, longitude_col, elevation_col],
+        ]
+        receiver_records.loc[conflicting_mask, name_col] = [
+            rename_map[(str(name), latitude, longitude, elevation)]
+            for name, latitude, longitude, elevation
+            in conflicting_locations.itertuples(index=False, name=None)
+        ]
+
+    def _rename_receiver_records(self, rename_map):
+        """Rename receiver locations consistently in all record types."""
+        for receiver_records, field_names in self._iter_receiver_fields():
+            self._rename_receiver_column(
+                receiver_records,
+                *field_names,
+                rename_map,
+            )
 
     def remove_duplicate_rec_by_src(self, mode="first"):
         """
@@ -659,13 +1105,13 @@ In this case, please set dist_in_data=True and read again."""
         self.src_points.sort_values(by=by, inplace=True)
         self.update()
 
-    def reset_index(self):
+    def reset_index(self, start=0):
         """
         Reset index of source and receivers.
         """
         # self.src_points.index = np.arange(len(self.src_points))
         # use index in self.sources when self.src_points['event_id'] == self.sources['event_id']
-        self.sources.index = np.arange(len(self.sources))
+        self.sources.index = np.arange(start, start + len(self.sources))
         new_index = self.src_points["event_id"].map(
             dict(zip(self.sources["event_id"], self.sources.index))
         )
@@ -861,13 +1307,18 @@ In this case, please set dist_in_data=True and read again."""
         """
         update num_rec in ``src_points`` by current ``rec_points``
         """
-        self.src_points["num_rec"] = self.rec_points.groupby("src_index").size()
-        if not self.rec_points_cr.empty:
-            num = self.rec_points_cr.groupby("src_index").size()
-            self.src_points.loc[num.index, "num_rec"] += num
-        if not self.rec_points_cs.empty:
-            num = self.rec_points_cs.groupby("src_index").size()
-            self.src_points.loc[num.index, "num_rec"] += num
+        num_rec = pd.Series(0, index=self.src_points.index, dtype=int)
+        for receiver_records in (
+            self.rec_points,
+            self.rec_points_cr,
+            self.rec_points_cs,
+        ):
+            if receiver_records.empty:
+                continue
+            counts = receiver_records.groupby("src_index").size()
+            matching_indices = counts.index.intersection(num_rec.index)
+            num_rec.loc[matching_indices] += counts.loc[matching_indices].astype(int)
+        self.src_points["num_rec"] = num_rec
 
     def update(self, mode="mean"):
         """
@@ -1077,19 +1528,38 @@ In this case, please set dist_in_data=True and read again."""
             "rec_points after selection: {}".format(self._count_records())
         )
 
+    def _remove_receiver_records(self, rec_list):
+        """Remove named receivers consistently from all record types."""
+        receiver_names = {str(receiver_name) for receiver_name in rec_list}
+        for receiver_records, field_names in self._iter_receiver_fields():
+            if receiver_records.empty:
+                continue
+            name_col = field_names[0]
+            remove_mask = receiver_records[name_col].astype(str).isin(
+                receiver_names
+            )
+            receiver_records.drop(
+                index=receiver_records.index[remove_mask],
+                inplace=True,
+            )
+            receiver_records.reset_index(drop=True, inplace=True)
+
     def remove_specified_recs(self, rec_list, **kwargs):
         """Remove specified receivers
+
+        Receiver observations are removed from absolute, common-source, and
+        common-receiver records.
 
         :param rec_list: List of receivers to be removed
         :type rec_list: list
         """
         self.log.SrcReclog.info(
-            "rec_points before removing: {}".format(self.rec_points.shape)
+            "receiver records before removing: {}".format(self._count_records())
         )
-        self.rec_points = self.rec_points[~self.rec_points["staname"].isin(rec_list)]
+        self._remove_receiver_records(rec_list)
         self.update(**kwargs)
         self.log.SrcReclog.info(
-            "rec_points after removing: {}".format(self.rec_points.shape)
+            "receiver records after removing: {}".format(self._count_records())
         )
 
     def select_by_box_region(self, region, **kwargs):
@@ -1154,53 +1624,489 @@ In this case, please set dist_in_data=True and read again."""
         )
 
     def calc_distaz(self):
-        """Calculate epicentral distance and azimuth for each receiver"""
-        self.rec_points["dist_deg"] = 0.0
-        self.rec_points["az"] = 0.0
-        self.rec_points["baz"] = 0.0
-        rec_group = self.rec_points.groupby("src_index")
-        for idx, rec in rec_group:
-            da = DistAZ(
-                self.src_points.loc[idx]["evla"],
-                self.src_points.loc[idx]["evlo"],
-                rec["stla"].values,
-                rec["stlo"].values,
-            )
-            self.rec_points.loc[rec.index, "dist_deg"] = da.delta
-            self.rec_points.loc[rec.index, "az"] = da.az
-            self.rec_points.loc[rec.index, "baz"] = da.baz
+        """Calculate distance and azimuth for each source--receiver pair.
 
-    def select_by_distance(self, dist_min_max, recalc_dist=False, **kwargs):
-        """Select stations in a range of distance
+        ``dist_deg`` and ``dist_km`` are the epicentral distance in degrees
+        and kilometres, respectively. ``dist_3d_km`` is the three-dimensional
+        Euclidean distance calculated from ``dist_km`` and the vertical
+        separation. Source depth is in km and receiver elevation is converted
+        from m to km.
+        """
+        output_columns = (
+            "dist_deg",
+            "dist_km",
+            "dist_3d_km",
+            "az",
+            "baz",
+        )
+        if self.rec_points.empty:
+            for column in output_columns:
+                self.rec_points[column] = pd.Series(dtype=float)
+            return
+
+        source_indices = self.rec_points["src_index"].to_numpy()
+        missing_source_indices = pd.Index(np.unique(source_indices)).difference(
+            self.src_points.index
+        )
+        if not missing_source_indices.empty:
+            missing = ", ".join(map(str, missing_source_indices.tolist()))
+            raise KeyError(
+                f"rec_points references missing src_index values: {missing}"
+            )
+
+        source_rows = self.src_points.reindex(source_indices)
+        distaz = DistAZ(
+            source_rows["evla"].to_numpy(dtype=float),
+            source_rows["evlo"].to_numpy(dtype=float),
+            self.rec_points["stla"].to_numpy(dtype=float),
+            self.rec_points["stlo"].to_numpy(dtype=float),
+        )
+        epicentral_distance_km = np.asarray(
+            distaz.degreesToKilometers(), dtype=float
+        )
+        vertical_distance_km = (
+            source_rows["evdp"].to_numpy(dtype=float)
+            + self.rec_points["stel"].to_numpy(dtype=float) / 1000.0
+        )
+
+        self.rec_points["dist_deg"] = distaz.delta
+        self.rec_points["dist_km"] = epicentral_distance_km
+        self.rec_points["dist_3d_km"] = np.hypot(
+            epicentral_distance_km, vertical_distance_km
+        )
+        self.rec_points["az"] = distaz.az
+        self.rec_points["baz"] = distaz.baz
+
+    def select_by_distance(
+        self,
+        dist_min_max,
+        recalc_dist=False,
+        distance="dist_deg",
+        **kwargs,
+    ):
+        """Select source--receiver pairs in a range of distance.
         
         .. note::
-            This criteria only works for absolute travel time data.
+            Absolute arrivals are retained when their epicentral distance is
+            in range. Common-source and common-receiver records are retained
+            only when both of their source--receiver distances are in range.
 
-        :param dist_min_max: limit of distance in deg, ``[dist_min, dist_max]``
+        :param dist_min_max: Distance limits, ``[dist_min, dist_max]``. Their
+                             unit follows ``distance``.
         :type dist_min_max: list or tuple
+        :param recalc_dist: Recalculate distance fields even when the selected
+                           field exists, defaults to ``False``.
+        :type recalc_dist: bool
+        :param distance: Distance field used for selection. Choose
+                         ``"dist_deg"`` for degrees or ``"dist_km"`` for km,
+                         defaults to ``"dist_deg"``.
+        :type distance: str
         """
+        if distance not in {"dist_deg", "dist_km"}:
+            raise ValueError(
+                "distance must be either 'dist_deg' or 'dist_km'"
+            )
+
         self.log.SrcReclog.info(
             "rec_points before selection: {}".format(self._count_records())
         )
-        # rec_group = self.rec_points.groupby('src_index')
-        if ("dist_deg" not in self.rec_points) or recalc_dist:
+        if (distance not in self.rec_points) or recalc_dist:
             self.log.SrcReclog.info("Calculating epicentral distance...")
             self.calc_distaz()
-        elif not recalc_dist:
-            pass
-        else:
-            self.log.SrcReclog.error(
-                "No such field of dist, please set up recalc_dist to True"
-            )
-        # for _, rec in rec_group:
-        mask = (self.rec_points["dist_deg"] < dist_min_max[0]) | (
-            self.rec_points["dist_deg"] > dist_min_max[1]
+
+        selected_distance = self.rec_points[distance]
+        mask = (selected_distance < dist_min_max[0]) | (
+            selected_distance > dist_min_max[1]
         )
         drop_idx = self.rec_points[mask].index
         self.rec_points = self.rec_points.drop(index=drop_idx)
+        self._filter_double_difference_by_distance(
+            dist_min_max, distance=distance
+        )
         self.update(**kwargs)
         self.log.SrcReclog.info(
             "rec_points after selection: {}".format(self._count_records())
+        )
+
+    @staticmethod
+    def _regression_keep_mask(records, std_multiplier, distance="dist_deg"):
+        """Return a mask for finite records within the residual limit."""
+        finite = np.isfinite(records[distance].to_numpy(dtype=float)) & \
+                 np.isfinite(records["tt"].to_numpy(dtype=float))
+        valid = records.loc[finite]
+        keep = pd.Series(False, index=records.index, dtype=bool)
+
+        if len(valid) < 2 or valid[distance].nunique() < 2:
+            keep.loc[valid.index] = True
+            return keep, None
+
+        slope, intercept, residual_std = fit_linear_regression(
+            valid[distance], valid["tt"]
+        )
+        residual = valid["tt"] - (slope * valid[distance] + intercept)
+        keep.loc[valid.index] = (
+            np.isclose(residual, 0.0) if residual_std == 0
+            else np.abs(residual) <= std_multiplier * residual_std
+        )
+        return keep, (slope, intercept, residual_std)
+
+    def linear_regression(
+        self,
+        phase=None,
+        recalc_dist=False,
+        distance="dist_3d_km",
+    ):
+        """Fit travel time as a linear function of distance.
+
+        This method only computes regression parameters; it does not filter
+        travel-time records. Non-finite distance/travel-time pairs are ignored
+        by the fit.
+
+        :param phase: Fit only this phase. When ``None``, all phases are used,
+                      defaults to ``None``.
+        :type phase: str or None
+        :param recalc_dist: Recalculate distance fields even when the selected
+                           field exists, defaults to ``False``.
+        :type recalc_dist: bool
+        :param distance: Independent variable used by the fit. Choose
+                         ``"dist_deg"`` for epicentral distance in degrees or
+                         ``"dist_km"`` for epicentral distance in km, or
+                         ``"dist_3d_km"`` for three-dimensional
+                         source--receiver distance in km, defaults to
+                         ``"dist_3d_km"``.
+        :type distance: str
+        :return: ``(slope, intercept, residual_std)``. Slope is in s/degree
+                 for ``dist_deg`` or s/km for the kilometre fields; the other
+                 values are in s.
+        :rtype: tuple of float
+        """
+        if phase is not None and not isinstance(phase, str):
+            raise TypeError("phase must be a string or None")
+        if distance not in {"dist_deg", "dist_km", "dist_3d_km"}:
+            raise ValueError(
+                "distance must be 'dist_deg', 'dist_km', or 'dist_3d_km'"
+            )
+
+        if (distance not in self.rec_points) or recalc_dist:
+            self.log.SrcReclog.info("Calculating source--receiver distance...")
+            self.calc_distaz()
+
+        records = self.rec_points
+        if phase is not None:
+            records = records.loc[records["phase"] == phase]
+            if records.empty:
+                raise ValueError(
+                    "No absolute travel-time records found for phase "
+                    f"{phase!r}"
+                )
+
+        return fit_linear_regression(records[distance], records["tt"])
+
+    def _filter_double_difference_by_arrivals(self):
+        """Remove double differences whose absolute arrivals were rejected."""
+        arrivals = set(
+            self.rec_points[["src_index", "staname", "phase"]]
+            .itertuples(index=False, name=None)
+        )
+        specs = (
+            ("rec_points_cs", ",cs",
+             (("src_index", "staname1"), ("src_index", "staname2")),
+             "common-source"),
+            ("rec_points_cr", ",cr",
+             (("src_index", "staname"), ("src_index2", "staname")),
+             "common-receiver"),
+        )
+
+        for attr, suffix, endpoints, label in specs:
+            records = getattr(self, attr)
+            if records.empty:
+                continue
+
+            phases = records["phase"].map(
+                lambda phase: phase[:-len(suffix)]
+                if isinstance(phase, str) and phase.endswith(suffix)
+                else phase
+            )
+            keep = np.ones(len(records), dtype=bool)
+            for src_col, sta_col in endpoints:
+                keys = zip(records[src_col], records[sta_col], phases)
+                keep &= np.fromiter(
+                    (key in arrivals for key in keys), bool, len(records)
+                )
+
+            setattr(self, attr, records.loc[keep])
+            self.log.SrcReclog.info(
+                "Removed {} corresponding {} records".format(
+                    len(records) - np.count_nonzero(keep), label
+                )
+            )
+
+    def _filter_double_difference_by_distance(
+        self,
+        dist_min_max,
+        distance="dist_deg",
+    ):
+        """Keep double differences whose two endpoint distances are in range."""
+        min_distance, max_distance = dist_min_max
+
+        def calculate_distance(lat1, lon1, lat2, lon2):
+            distaz = DistAZ(lat1, lon1, lat2, lon2)
+            if distance == "dist_km":
+                return distaz.degreesToKilometers()
+            return distaz.delta
+
+        def in_range(values):
+            values = np.asarray(values, dtype=float)
+            return (
+                np.isfinite(values)
+                & (values >= min_distance)
+                & (values <= max_distance)
+            )
+
+        if not self.rec_points_cs.empty:
+            records = self.rec_points_cs
+            source_latitudes = self.src_points["evla"].reindex(
+                records["src_index"]
+            ).to_numpy()
+            source_longitudes = self.src_points["evlo"].reindex(
+                records["src_index"]
+            ).to_numpy()
+            distance1 = calculate_distance(
+                source_latitudes,
+                source_longitudes,
+                records["stla1"].to_numpy(),
+                records["stlo1"].to_numpy(),
+            )
+            distance2 = calculate_distance(
+                source_latitudes,
+                source_longitudes,
+                records["stla2"].to_numpy(),
+                records["stlo2"].to_numpy(),
+            )
+            keep = in_range(distance1) & in_range(distance2)
+            self.rec_points_cs = records.loc[keep]
+            self.log.SrcReclog.info(
+                "Removed {} common-source records outside the distance "
+                "range".format(len(records) - np.count_nonzero(keep))
+            )
+
+        if not self.rec_points_cr.empty:
+            records = self.rec_points_cr
+            source_latitudes = self.src_points["evla"].reindex(
+                records["src_index"]
+            ).to_numpy()
+            source_longitudes = self.src_points["evlo"].reindex(
+                records["src_index"]
+            ).to_numpy()
+            station_latitudes = records["stla"].to_numpy()
+            station_longitudes = records["stlo"].to_numpy()
+            distance1 = calculate_distance(
+                source_latitudes,
+                source_longitudes,
+                station_latitudes,
+                station_longitudes,
+            )
+            distance2 = calculate_distance(
+                records["evla2"].to_numpy(),
+                records["evlo2"].to_numpy(),
+                station_latitudes,
+                station_longitudes,
+            )
+            keep = in_range(distance1) & in_range(distance2)
+            self.rec_points_cr = records.loc[keep]
+            self.log.SrcReclog.info(
+                "Removed {} common-receiver records outside the distance "
+                "range".format(len(records) - np.count_nonzero(keep))
+            )
+
+    def select_by_linear_regression(self, std_multiplier=3.0,
+                                    recalc_dist=False, separate_phase=True,
+                                    distance="dist_3d_km",
+                                    **kwargs):
+        """Select absolute travel times by linear-regression residual.
+
+        A straight line is fitted between the selected distance and travel
+        time. Records whose absolute residual is greater than ``std_multiplier``
+        times the residual standard deviation are removed. By default each
+        phase is fitted separately so that phases with different apparent
+        velocities are not mixed.
+
+        .. note::
+            This criterion only applies to absolute travel-time data in
+            :attr:`rec_points`. A double-difference record is removed when
+            either of its corresponding absolute travel times is rejected.
+
+        :param std_multiplier: Multiplier applied to the residual standard
+                               deviation, defaults to 3.
+        :type std_multiplier: float
+        :param recalc_dist: Recalculate distance fields even when the selected
+                           field exists, defaults to False.
+        :type recalc_dist: bool
+        :param separate_phase: Fit each phase separately, defaults to True.
+        :type separate_phase: bool
+        :param distance: Independent variable used by the fit. Choose
+                         ``"dist_deg"`` for epicentral distance in degrees or
+                         ``"dist_km"`` for epicentral distance in km, or
+                         ``"dist_3d_km"`` for three-dimensional
+                         source--receiver distance in km, defaults to
+                         ``"dist_3d_km"``.
+        :type distance: str
+        :return: Mapping from phase name to
+                 ``(slope, intercept, residual_std)``. When
+                 ``separate_phase=False``, the key is ``"all"``.
+        :rtype: dict
+        """
+        if (not np.isscalar(std_multiplier)
+                or not np.isfinite(std_multiplier)
+                or std_multiplier <= 0):
+            raise ValueError("std_multiplier must be a positive finite number")
+        if distance not in {"dist_deg", "dist_km", "dist_3d_km"}:
+            raise ValueError(
+                "distance must be 'dist_deg', 'dist_km', or 'dist_3d_km'"
+            )
+
+        self.log.SrcReclog.info(
+            "rec_points before travel-time selection: {}".format(
+                self.rec_points.shape[0]
+            )
+        )
+        if (distance not in self.rec_points) or recalc_dist:
+            self.log.SrcReclog.info("Calculating source--receiver distance...")
+            self.calc_distaz()
+
+        keep = pd.Series(False, index=self.rec_points.index, dtype=bool)
+        groups = (self.rec_points.groupby("phase", dropna=False)
+                  if separate_phase else [("all", self.rec_points)])
+        regression_params = {}
+
+        for phase, records in groups:
+            group_keep, params = self._regression_keep_mask(
+                records, std_multiplier, distance=distance
+            )
+            keep.loc[records.index] = group_keep
+            if params is not None:
+                regression_params[phase] = params
+
+        self.rec_points = self.rec_points.loc[keep]
+        self._filter_double_difference_by_arrivals()
+        self.update(**kwargs)
+        self.log.SrcReclog.info(
+            "rec_points after travel-time selection: {}".format(
+                self.rec_points.shape[0]
+            )
+        )
+        return regression_params
+
+    def select_by_constant_velocity(
+        self,
+        velocity,
+        tt_res_range,
+        distance="dist_km",
+        recalc_dist=False,
+        **kwargs,
+    ):
+        """Select arrivals around a constant-velocity travel-time curve.
+
+        An arrival is retained when its travel-time residual satisfies
+
+        ``tt_res_range[0] < tt - distance / velocity < tt_res_range[1]``.
+
+        ``distance`` may be ``"dist_km"`` for epicentral distance or
+        ``"dist_3d_km"`` for three-dimensional distance. Both are measured in
+        kilometres. The residual bounds may be asymmetric. Non-finite
+        distances or travel times are removed.
+
+        .. note::
+            This criterion only applies to absolute travel-time data in
+            :attr:`rec_points`. A double-difference record is removed when
+            either corresponding absolute arrival is rejected.
+
+        :param velocity: Constant reference velocity in kilometres per second.
+        :type velocity: float
+        :param tt_res_range: Exclusive travel-time residual range in seconds,
+                             ``(min_residual, max_residual)``.
+        :type tt_res_range: list or tuple
+        :param distance: Distance used to calculate the reference travel time;
+                         either ``"dist_km"`` for epicentral distance or
+                         ``"dist_3d_km"`` for three-dimensional distance,
+                         defaults to ``"dist_km"``.
+        :type distance: str, optional
+        :param recalc_dist: Recalculate distance even when the selected
+                           distance column exists, defaults to False.
+        :type recalc_dist: bool
+        """
+        if (
+            not isinstance(distance, str)
+            or distance not in {"dist_km", "dist_3d_km"}
+        ):
+            raise ValueError(
+                "distance must be either 'dist_km' or 'dist_3d_km'"
+            )
+
+        if (
+            not isinstance(velocity, Real)
+            or isinstance(velocity, (bool, np.bool_))
+            or not np.isfinite(velocity)
+            or velocity <= 0
+        ):
+            raise ValueError("velocity must be a positive finite number")
+
+        try:
+            min_residual, max_residual = tt_res_range
+        except (TypeError, ValueError):
+            raise ValueError(
+                "tt_res_range must contain exactly two finite numbers"
+            ) from None
+        if not all(
+            isinstance(value, Real)
+            and not isinstance(value, (bool, np.bool_))
+            and np.isfinite(value)
+            for value in (min_residual, max_residual)
+        ):
+            raise ValueError(
+                "tt_res_range must contain exactly two finite numbers"
+            )
+        if min_residual > max_residual:
+            raise ValueError(
+                "tt_res_range minimum must not exceed its maximum"
+            )
+
+        self.log.SrcReclog.info(
+            "src_points before constant-velocity selection: {}".format(
+                self.src_points.shape[0]
+            )
+        )
+        self.log.SrcReclog.info(
+            "rec_points before constant-velocity selection: {}".format(
+                self.rec_points.shape[0]
+            )
+        )
+        if (distance not in self.rec_points) or recalc_dist:
+            self.log.SrcReclog.info("Calculating epicentral distance...")
+            self.calc_distaz()
+
+        distances_km = self.rec_points[distance].to_numpy(dtype=float)
+        travel_times = self.rec_points["tt"].to_numpy(dtype=float)
+        residuals = travel_times - distances_km / velocity
+        keep = (
+            np.isfinite(distances_km)
+            & np.isfinite(travel_times)
+            & (residuals > min_residual)
+            & (residuals < max_residual)
+        )
+
+        self.rec_points = self.rec_points.loc[keep]
+        self._filter_double_difference_by_arrivals()
+        self.update(**kwargs)
+        self.log.SrcReclog.info(
+            "src_points after constant-velocity selection: {}".format(
+                self.src_points.shape[0]
+            )
+        )
+        self.log.SrcReclog.info(
+            "rec_points after constant-velocity selection: {}".format(
+                self.rec_points.shape[0]
+            )
         )
 
     def select_by_azi_gap(self, max_azi_gap: float, **kwargs):
@@ -1325,17 +2231,29 @@ In this case, please set dist_in_data=True and read again."""
         # self.remove_rec_by_new_src()
         self.update(**kwargs)
 
-    def box_weighting(self, d_deg: float, d_km: float, obj="both", dd_weight='average'):
+    def box_weighting(
+        self,
+        d_deg: float,
+        d_km: float | None = None,
+        obj="both",
+        dd_weight="average",
+    ):
         """Weighting sources and receivers by number in each subgrid
 
         :param d_deg: grid size along lat and lon in degree
         :type d_deg: float
-        :param d_km: grid size along depth axis in km, (only used when obj=``src`` or ``both``)
-        :type d_km: float
+        :param d_km: Grid size along the depth axis in km. Required only when
+                     ``obj="src"`` or ``obj="both"``, defaults to ``None``.
+        :type d_km: float, optional
         :param obj: Object to be weighted, options: ``src``, ``rec`` or ``both``, defaults to ``both``
         :type obj: str, optional
         :param dd_weight: Weighting method for double difference, options: ``average``, `multiply`, defaults to ``average``
         """
+        if obj in {"src", "both"} and d_km is None:
+            raise ValueError(
+                "d_km is required when obj is 'src' or 'both'"
+            )
+
         if obj == "src":
             self._box_weighting_ev(d_deg, d_km)
         elif obj == "rec":
@@ -1385,72 +2303,81 @@ In this case, please set dist_in_data=True and read again."""
         )
 
     def _box_weighting_st(self, d_deg: float, dd_weight='average'):
-        """Weighting receivers by number of sources in each subgrid
+        """Weight receivers by density in two-dimensional horizontal cells.
+
+        Receiver elevation is intentionally ignored. Stations are grouped
+        only by latitude and longitude.
 
         :param d_deg: grid size along lat and lon in degree
         :type d_deg: float
         """
+        if not isinstance(d_deg, Real) or not np.isfinite(d_deg) or d_deg <= 0:
+            raise ValueError("d_deg must be a positive finite number")
+
         self.log.SrcReclog.info(
             "Box weighting for receivers: d_deg={}".format(d_deg)
         )
 
-        # group events by grid size
-        self.receivers["lat_group"] = self.receivers["stla"].apply(
-            lambda x: int(x / d_deg)
-        )
-        self.receivers["lon_group"] = self.receivers["stlo"].apply(
-            lambda x: int(x / d_deg)
-        )
+        duplicate_receiver_count = self.receivers.duplicated(
+            subset="staname"
+        ).sum()
+        if duplicate_receiver_count:
+            self.log.SrcReclog.warning(
+                "Found %d duplicate receiver rows by staname; keeping the "
+                "first occurrence for box_weighting",
+                duplicate_receiver_count,
+            )
+            self.receivers = self.receivers.drop_duplicates(
+                subset="staname", keep="first", ignore_index=True
+            )
 
-        # count num of sources in the same lat_group and lon_group
+        horizontal_coordinates = self.receivers[["stla", "stlo"]].to_numpy(
+            dtype=float
+        )
+        if not np.isfinite(horizontal_coordinates).all():
+            raise ValueError("receiver latitude and longitude must be finite")
+        horizontal_groups = np.trunc(
+            horizontal_coordinates / d_deg
+        ).astype(np.int64)
+        self.receivers[["lat_group", "lon_group"]] = horizontal_groups
+
         self.receivers["num_receivers"] = self.receivers.groupby(
             ["lat_group", "lon_group"]
         )["lat_group"].transform("count")
-
-        # calculate weight for each event
-        self.receivers["weight"] = 1 / np.sqrt(self.receivers["num_receivers"])
-
-        # assign weight to rec_points
-        self.rec_points["weight"] = self.rec_points.apply(
-            lambda x: self.receivers[
-                (self.receivers["staname"] == x["staname"])
-            ]["weight"].values[0],
-            axis=1,
+        self.receivers["weight"] = np.reciprocal(
+            np.sqrt(self.receivers["num_receivers"].to_numpy(dtype=float))
         )
 
-        # assign weight to rec_points_cs
-        # the weight is the average of the two receivers
+        receiver_weights = dict(zip(
+            self.receivers["staname"],
+            self.receivers["weight"],
+        ))
+        self.rec_points["weight"] = self.rec_points["staname"].map(
+            receiver_weights
+        )
+
         if not self.rec_points_cs.empty:
-            self.rec_points_cs["weight"] = self.rec_points_cs.apply(
-                lambda x: self._cal_dd_weight(
-                    self.receivers[
-                        (self.receivers["staname"] == x["staname1"])
-                    ]["weight"].values[0],
-                    self.receivers[
-                        (self.receivers["staname"] == x["staname2"])
-                    ]["weight"].values[0],
-                    dd_weight
-                ),
-                axis=1,
-            )
-        
-        # assign weight to rec_points_cr
-        # the weight is the average of the one receiver and the other source
-        if not self.rec_points_cr.empty:
-            self.rec_points_cr["weight"] = self.rec_points_cr.apply(
-                lambda x: self._cal_dd_weight(
-                    self.receivers[
-                        (self.receivers["staname"] == x["staname"])
-                    ]["weight"].values[0],
-                    self.src_points[
-                        (self.src_points["event_id"] == x["event_id2"])
-                    ]["weight"].values[0],
-                    dd_weight
-                ),
-                axis=1,
+            weight1 = self.rec_points_cs["staname1"].map(receiver_weights)
+            weight2 = self.rec_points_cs["staname2"].map(receiver_weights)
+            self.rec_points_cs["weight"] = self._cal_dd_weight(
+                weight1, weight2, dd_weight
             )
 
-        # drop 'lat_group' and 'lon_group'
+        if not self.rec_points_cr.empty:
+            source_weights = dict(zip(
+                self.src_points["event_id"],
+                self.src_points["weight"],
+            ))
+            receiver_weight = self.rec_points_cr["staname"].map(
+                receiver_weights
+            )
+            source_weight = self.rec_points_cr["event_id2"].map(
+                source_weights
+            )
+            self.rec_points_cr["weight"] = self._cal_dd_weight(
+                receiver_weight, source_weight, dd_weight
+            )
+
         self.receivers = self.receivers.drop(
             columns=["lat_group", "lon_group", "num_receivers"]
         )
@@ -1469,7 +2396,8 @@ In this case, please set dist_in_data=True and read again."""
         ].transform("max")
 
     def generate_double_difference(self, type='cs', max_azi_gap=15, max_dist_gap=2.5,
-                                    dd_weight='average', recalc_baz=False, **kwargs):
+                                    dd_weight='average', recalc_baz=False,
+                                    same_phase=True, dis_type='dis_dif', **kwargs):
         """
         Generate double difference data
 
@@ -1477,25 +2405,38 @@ In this case, please set dist_in_data=True and read again."""
         :type type: str, optional
         :param max_azi_gap: Maximum azimuthal gap for selecting events, defaults to 15
         :type max_azi_gap: float, optional
-        :param max_dist_gap: Maximum distance gap for selecting events, defaults to 2.5
+        :param max_dist_gap: Maximum distance gap in degrees for selecting
+                             pairs, defaults to 2.5
         :type max_dist_gap: float, optional
         :param dd_weight: Weighting method for double difference, options: ``average``, ``multiply``, defaults to ``average``
         :param recalc_baz: Recalculate azimuth and back azimuth, defaults to ``False``
         :type recalc_baz: bool, optional
+        :param same_phase: Only pair records with the same phase, defaults to ``True``
+        :type same_phase: bool, optional
+        :param dis_type: Distance constraint type. ``"dis_dif"`` compares the
+                         difference between the two source--receiver
+                         epicentral distances. ``"dis_pair"`` compares the
+                         station--station separation for common-source pairs
+                         and event--event separation for common-receiver
+                         pairs, defaults to ``"dis_dif"``.
+        :type dis_type: str, optional
 
         ``self.rec_points_cr`` or ``self.rec_points_cs`` are generated
         """
+
+        if dis_type not in {"dis_dif", "dis_pair"}:
+            raise ValueError("dis_type must be either 'dis_dif' or 'dis_pair'")
 
         if ("dist_deg" not in self.rec_points or "baz" not in self.rec_points) or recalc_baz:
             self.calc_distaz()
 
         if type == 'cs':
-            self._generate_cs(max_azi_gap, max_dist_gap, dd_weight)
+            self._generate_cs(max_azi_gap, max_dist_gap, dd_weight, same_phase, dis_type)
         elif type == 'cr':
-            self._generate_cr(max_azi_gap, max_dist_gap, dd_weight)
+            self._generate_cr(max_azi_gap, max_dist_gap, dd_weight, same_phase, dis_type)
         elif type == 'both':
-            self._generate_cs(max_azi_gap, max_dist_gap, dd_weight)
-            self._generate_cr(max_azi_gap, max_dist_gap, dd_weight)
+            self._generate_cs(max_azi_gap, max_dist_gap, dd_weight, same_phase, dis_type)
+            self._generate_cr(max_azi_gap, max_dist_gap, dd_weight, same_phase, dis_type)
         else:
             self.log.SrcReclog.error(
                 "Only 'cs', 'cr' or 'both' are supported for type of double difference"
@@ -1503,7 +2444,8 @@ In this case, please set dist_in_data=True and read again."""
 
         self.update(**kwargs)
 
-    def _generate_cs(self, max_azi_gap, max_dist_gap, dd_weight='average'):
+    def _generate_cs(self, max_azi_gap, max_dist_gap, dd_weight='average',
+                     same_phase=True, dis_type='dis_dif'):
         names, _ = setup_rec_points_dd('cs')
         self.rec_points_cs = pd.DataFrame(columns=names)
         src = self.rec_points.groupby("src_index")
@@ -1526,9 +2468,20 @@ In this case, please set dist_in_data=True and read again."""
             weights = rec_data['weight'].values
             for i in range(rec_data.shape[0]):
                 for j in range(i + 1, rec_data.shape[0]):
-                    if abs(baz_values[i] - baz_values[j]) < max_azi_gap and \
-                       abs(dist_deg_values[i] - dist_deg_values[j]) < max_dist_gap and \
-                       phases[i] == phases[j]:
+                    baz_gap = abs(
+                        (baz_values[i] - baz_values[j] + 180) % 360 - 180
+                    )
+                    if dis_type == "dis_pair":
+                        dist_gap = DistAZ(
+                            stlas[i], stlos[i], stlas[j], stlos[j]
+                        ).delta
+                    else:
+                        dist_gap = abs(dist_deg_values[i] - dist_deg_values[j])
+                    if (
+                        baz_gap < max_azi_gap
+                        and dist_gap < max_dist_gap
+                        and (not same_phase or phases[i] == phases[j])
+                    ):
                         data_row = {
                             "src_index": idx,
                             "rec_index1": rec_indices[i],
@@ -1553,7 +2506,8 @@ In this case, please set dist_in_data=True and read again."""
             "rec_points_cs after generation: {}".format(self.rec_points_cs.shape)
         )
 
-    def _generate_cr(self, max_azi_gap, max_dist_gap, dd_weight='average'):
+    def _generate_cr(self, max_azi_gap, max_dist_gap, dd_weight='average',
+                     same_phase=True, dis_type='dis_dif'):
         names, _ = setup_rec_points_dd('cr')
         self.rec_points_cr = pd.DataFrame(columns=names)
         src_id = self.src_points["event_id"].values
@@ -1580,9 +2534,21 @@ In this case, please set dist_in_data=True and read again."""
             for i in range(rec_data.shape[0]):
                 for j in range(i + 1, rec_data.shape[0]):
                     src_index = src_indices[j]
-                    if abs(baz_values[i] - baz_values[j]) < max_azi_gap and \
-                       abs(dist_deg_values[i] - dist_deg_values[j]) < max_dist_gap and \
-                       rec_phases[i] == rec_phases[j]:
+                    baz_gap = abs(
+                        (baz_values[i] - baz_values[j] + 180) % 360 - 180
+                    )
+                    if dis_type == "dis_pair":
+                        dist_gap = DistAZ(
+                            src_la[src_indices[i]], src_lo[src_indices[i]],
+                            src_la[src_index], src_lo[src_index],
+                        ).delta
+                    else:
+                        dist_gap = abs(dist_deg_values[i] - dist_deg_values[j])
+                    if (
+                        baz_gap < max_azi_gap
+                        and dist_gap < max_dist_gap
+                        and (not same_phase or rec_phases[i] == rec_phases[j])
+                    ):
                         data_row = {
                             "src_index": src_indices[i],
                             "rec_index": rec_indices[i],
@@ -1615,12 +2581,31 @@ In this case, please set dist_in_data=True and read again."""
         return count
 
     def _calc_weights(self, lat, lon, scale):
-        points = pd.concat([lon, lat], axis=1)
-        points_rad = points * (np.pi / 180)
-        dist = haversine_distances(points_rad) * 6371.0 / 111.19
-        dist_ref = scale * np.mean(dist)
-        om = np.exp(-((dist / dist_ref) ** 2)) * points.shape[0]
-        return 1 / np.mean(om, axis=0)
+        """Calculate inverse-density weights normalized to a maximum of one."""
+        if not isinstance(scale, Real) or not np.isfinite(scale) or scale <= 0:
+            raise ValueError("scale must be a positive finite number")
+
+        points_rad = np.column_stack((
+            np.asarray(lat, dtype=float),
+            np.asarray(lon, dtype=float),
+        ))
+        if len(points_rad) == 0:
+            return np.empty(0, dtype=float)
+        if not np.isfinite(points_rad).all():
+            raise ValueError("latitude and longitude must be finite")
+
+        np.deg2rad(points_rad, out=points_rad)
+        distances = haversine_distances(points_rad)
+        mean_distance = distances.mean()
+        if np.isclose(mean_distance, 0.0):
+            return np.ones(len(points_rad), dtype=float)
+
+        distances /= scale * mean_distance
+        np.square(distances, out=distances)
+        distances *= -1.0
+        np.exp(distances, out=distances)
+        weights = np.reciprocal(distances.sum(axis=0))
+        return weights / weights.max()
     
     def _cal_dd_weight(self, w1, w2, dd_weight='average'):
         if dd_weight == "average":
@@ -1631,7 +2616,12 @@ In this case, please set dist_in_data=True and read again."""
             raise ValueError("Only 'average' or 'multiply' are supported for dd_weight")
 
     def geo_weighting(self, scale=0.5, obj="both", dd_weight="average"):
-        """Calculating geographical weights for sources
+        """Calculate and assign normalized geographical weights.
+
+        Source and receiver weights are normalized so that the maximum of
+        each calculated population is one before weights are propagated to
+        absolute and double-difference records. Consequently, all generated
+        weights are no greater than one.
 
         :param scale: Scale of reference distance parameter. 
                       See equation 22 in Ruan et al., (2019). The reference distance is given by ``scale* dis_average``, defaults to 0.5
@@ -1641,39 +2631,78 @@ In this case, please set dist_in_data=True and read again."""
         :param dd_weight: Weighting method for double difference data, options: ``average`` or ``multiply``, defaults to ``average``
         """
 
-        if obj == "src" or obj == "both":
+        if obj not in {"src", "rec", "both"}:
+            raise ValueError("obj must be 'src', 'rec', or 'both'")
+        if dd_weight not in {"average", "multiply"}:
+            raise ValueError(
+                "Only 'average' or 'multiply' are supported for dd_weight"
+            )
+
+        if obj in {"src", "both"}:
             self.src_points["weight"] = self._calc_weights(
                 self.src_points["evla"], self.src_points["evlo"], scale
             )
-            # assign weight to sources
-            self.sources["weight"] = self.sources.apply(
-                lambda x: self.src_points[
-                    (self.src_points["event_id"] == x["event_id"])
-                ]["weight"].values[0],
-                axis=1,
+            source_weights = dict(zip(
+                self.src_points["event_id"],
+                self.src_points["weight"],
+            ))
+            self.sources["weight"] = self.sources["event_id"].map(
+                source_weights
             )
-        if obj == "rec" or obj == "both":
+
+        if obj in {"rec", "both"}:
+            duplicate_receiver_count = self.receivers.duplicated(
+                subset="staname"
+            ).sum()
+            if duplicate_receiver_count:
+                self.log.SrcReclog.warning(
+                    "Found %d duplicate receiver rows by staname; keeping "
+                    "the first occurrence for geo_weighting",
+                    duplicate_receiver_count,
+                )
+                self.receivers = self.receivers.drop_duplicates(
+                    subset="staname", keep="first", ignore_index=True
+                )
+
             weights = self._calc_weights(
                 self.receivers['stla'],
                 self.receivers['stlo'],
                 scale
             )
-            # apply weights to rec_points
             self.receivers['weight'] = weights
-            for row in self.receivers.itertuples(index=False):
-                self.rec_points.loc[self.rec_points['staname'] == row.staname, 'weight'] = row.weight
+            receiver_weights = dict(zip(
+                self.receivers["staname"],
+                self.receivers["weight"],
+            ))
+            self.rec_points["weight"] = self.rec_points["staname"].map(
+                receiver_weights
+            )
 
             if not self.rec_points_cs.empty:
-                for row in self.rec_points_cs.itertuples(index=True):
-                    w1 = self.receivers.loc[self.receivers['staname'] == row.staname1, 'weight'].values[0]
-                    w2 = self.receivers.loc[self.receivers['staname'] == row.staname2, 'weight'].values[0]
-                    self.rec_points_cs.loc[row.Index, 'weight'] = self._cal_dd_weight(w1, w2, dd_weight)
+                weight1 = self.rec_points_cs["staname1"].map(
+                    receiver_weights
+                )
+                weight2 = self.rec_points_cs["staname2"].map(
+                    receiver_weights
+                )
+                self.rec_points_cs["weight"] = self._cal_dd_weight(
+                    weight1, weight2, dd_weight
+                )
 
             if not self.rec_points_cr.empty:
-                for row in self.rec_points_cr.itertuples(index=True):
-                    w1 = self.receivers.loc[self.receivers['staname'] == row.staname, 'weight'].values[0]
-                    w2 = self.src_points.loc[self.src_points['event_id'] == row.event_id2, 'weight'].values[0]
-                    self.rec_points_cr.loc[row.Index, 'weight'] = self._cal_dd_weight(w1, w2, dd_weight)
+                source_weights = dict(zip(
+                    self.src_points["event_id"],
+                    self.src_points["weight"],
+                ))
+                receiver_weight = self.rec_points_cr["staname"].map(
+                    receiver_weights
+                )
+                source_weight = self.rec_points_cr["event_id2"].map(
+                    source_weights
+                )
+                self.rec_points_cr["weight"] = self._cal_dd_weight(
+                    receiver_weight, source_weight, dd_weight
+                )
 
     def add_noise(self, range_in_sec=0.1, mean_in_sec=0.0, shape="gaussian"):
         """Add random noise on travel time
@@ -1768,7 +2797,12 @@ In this case, please set dist_in_data=True and read again."""
 
         :param fname: Path to output txt file of receivers
         """
-        self.receivers.to_csv(fname, sep=" ", header=False, index=False)
+        receivers = self.receivers.copy()
+        if "weight" in receivers:
+            receivers["weight"] = receivers["weight"].map(
+                lambda value: "" if pd.isna(value) else f"{value:.4f}"
+            )
+        receivers.to_csv(fname, sep=" ", header=False, index=False)
 
     def write_sources(self, fname: str):
         """
@@ -1776,7 +2810,12 @@ In this case, please set dist_in_data=True and read again."""
 
         :param fname: Path to output txt file of sources
         """
-        self.sources.to_csv(fname, sep=" ", header=False, index=False)
+        sources = self.sources.copy()
+        if "weight" in sources:
+            sources["weight"] = sources["weight"].map(
+                lambda value: "" if pd.isna(value) else f"{value:.4f}"
+            )
+        sources.to_csv(fname, sep=" ", header=False, index=False)
 
     @classmethod
     def from_seispy(cls, rf_path: str):
@@ -1808,20 +2847,87 @@ In this case, please set dist_in_data=True and read again."""
 
         return sr
 
-    # implemented in vis.py
-    def plot(self, weight=False, fname=None):
-        """Plot source and receivers for preview
+    # implemented in utils/vis.py
+    def plot(self, color_by="depth", fname=None, **kwargs):
+        """Plot sources and receivers with source-depth sections.
 
-        :param weight: Draw colors of weights, defaults to False
-        :type weight: bool, optional
+        :param color_by: Source attribute used for color mapping; either
+                         ``"depth"`` or ``"weight"``, defaults to ``"depth"``
+        :type color_by: str, optional
         :param fname: Path to output file, defaults to None
         :type fname: str, optional
+        :param kwargs: Additional keyword arguments passed to Matplotlib's
+                       ``Axes.scatter`` for source points, such as ``cmap``,
+                       ``s``, ``alpha``, ``marker``, ``vmin`` and ``vmax``
         :return: matplotlib figure
         :rtype: matplotlib.figure.Figure
         """
-        from .vis import plot_srcrec
+        from .utils.vis import plot_src_rec
 
-        return plot_srcrec(self, weight=weight, fname=fname)
+        return plot_src_rec(
+            self, color_by=color_by, fname=fname, **kwargs
+        )
+
+    def plot_travel_time(
+        self,
+        color=None,
+        fname=None,
+        fig=None,
+        ylim="adaptive",
+        distance="dist_3d_km",
+        **kwargs,
+    ):
+        """Plot absolute travel time against source--receiver distance.
+
+        If the selected distance field is unavailable, epicentral distance is
+        calculated before plotting.
+        The returned Matplotlib figure remains editable; use
+        ``figure.axes[0]`` to add lines, annotations, or other content.
+
+        :param distance: Distance field used for the x-axis. Choose
+                         ``"dist_3d_km"`` for three-dimensional distance,
+                         ``"dist_deg"`` for epicentral distance in degrees,
+                         or ``"dist_km"`` for epicentral distance in km,
+                         defaults to ``"dist_3d_km"``.
+        :type distance: str, optional
+        :param color: Matplotlib-compatible point color. When ``None``, the
+                      next color from the current axis color cycle is used.
+        :param fname: Path to output file, defaults to None.
+        :type fname: str, optional
+        :param fig: Existing Matplotlib figure on which to draw, defaults to
+                    None. Its current axis is used, or one is created when
+                    necessary.
+        :type fig: matplotlib.figure.Figure, optional
+        :param ylim: Y-axis scaling strategy. Use ``"adaptive"`` to derive
+                     limits from travel times at the minimum and maximum
+                     epicentral distances, ``"auto"`` for Matplotlib
+                     autoscaling, ``"inherit"`` to preserve the limits of an
+                     existing figure, or pass ``(min, max)`` explicitly.
+        :param kwargs: Additional keyword arguments passed to Matplotlib's
+                       ``Axes.scatter``.
+        :return: Matplotlib figure.
+        :rtype: matplotlib.figure.Figure
+        """
+        if distance not in {"dist_deg", "dist_km", "dist_3d_km"}:
+            raise ValueError(
+                "distance must be 'dist_deg', 'dist_km', or 'dist_3d_km'"
+            )
+
+        if distance not in self.rec_points:
+            self.log.SrcReclog.info("Calculating source--receiver distance...")
+            self.calc_distaz()
+
+        from .utils.vis import plot_travel_time
+
+        return plot_travel_time(
+            self,
+            distance=distance,
+            color=color,
+            fname=fname,
+            fig=fig,
+            ylim=ylim,
+            **kwargs,
+        )
 
 
 if __name__ == "__main__":
