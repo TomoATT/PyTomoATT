@@ -257,9 +257,10 @@ class SrcRec:
             conflicting receiver location and stops reading; ``"remove"``
             removes all observations involving those receiver names;
             ``"max_count"`` keeps the location with the highest occurrence
-            count and removes observations at other locations; and
-            ``"rename"`` keeps the locations and appends ``_A``, ``_B``, ...
-            to distinguish them.
+            count and removes observations at other locations; ``"average"``
+            replaces all conflicting locations by their count-weighted mean
+            location; and ``"rename"`` keeps the locations and appends ``_A``,
+            ``_B``, ... to distinguish them.
         :type conflicting_receiver_action: str
         :return: class of SrcRec
         :rtype: SrcRec
@@ -269,12 +270,13 @@ class SrcRec:
             "remove",
             "rename",
             "max_count",
+            "average",
         }
         if conflicting_receiver_action not in valid_conflicting_receiver_actions:
             raise ValueError(
                 "Invalid conflicting_receiver_action: "
                 f"{conflicting_receiver_action!r}. Supported actions are "
-                "'error', 'remove', 'rename', and 'max_count'."
+                "'error', 'remove', 'rename', 'max_count', and 'average'."
             )
 
         sr = cls(fname=fname, **kwargs)
@@ -745,17 +747,19 @@ In this case, please set dist_in_data=True and read again."""
             :class:`ValueError` containing all conflicting locations;
             ``"remove"`` removes all observations involving those names;
             ``"max_count"`` keeps the location with the highest occurrence
-            count and removes observations at other locations; and
-            ``"rename"`` appends ``_A``, ``_B``, ... to each distinct
+            count and removes observations at other locations; ``"average"``
+            replaces all conflicting locations by their count-weighted mean
+            location, so that locations observed more often contribute more;
+            and ``"rename"`` appends ``_A``, ``_B``, ... to each distinct
             location.
         :type conflicting_receiver_action: str
         """
-        valid_actions = {"error", "remove", "rename", "max_count"}
+        valid_actions = {"error", "remove", "rename", "max_count", "average"}
         if conflicting_receiver_action not in valid_actions:
             raise ValueError(
                 "Invalid conflicting_receiver_action: "
                 f"{conflicting_receiver_action!r}. Supported actions are "
-                "'error', 'remove', 'rename', and 'max_count'."
+                "'error', 'remove', 'rename', 'max_count', and 'average'."
             )
 
         # get sources
@@ -830,6 +834,29 @@ In this case, please set dist_in_data=True and read again."""
                     f"{conflict_message}\n"
                     "Kept max-count receiver locations and removed "
                     f"other conflicting locations:\n{kept_receivers}"
+                )
+            elif conflicting_receiver_action == "average":
+                average_map = self._build_average_receiver_location_map(
+                    receiver_rows,
+                    conflicting_receiver_names,
+                )
+                self._set_receiver_records_location(average_map)
+                averaged_receivers = pd.DataFrame(
+                    [
+                        {
+                            "staname": name,
+                            "stla": latitude,
+                            "stlo": longitude,
+                            "stel": elevation,
+                        }
+                        for name, (latitude, longitude, elevation)
+                        in average_map.items()
+                    ]
+                ).to_string(index=False)
+                self.log.SrcReclog.warning(
+                    f"{conflict_message}\n"
+                    "Replaced conflicting locations by their count-weighted "
+                    f"mean location:\n{averaged_receivers}"
                 )
             else:
                 rename_map = self._build_conflicting_receiver_rename_map(
@@ -925,6 +952,57 @@ In this case, please set dist_in_data=True and read again."""
             keep &= ~name_mask | keep_location_mask
         receiver_records.drop(index=receiver_records.index[~keep], inplace=True)
         receiver_records.reset_index(drop=True, inplace=True)
+
+    @staticmethod
+    def _build_average_receiver_location_map(
+        receiver_rows,
+        conflicting_receiver_names,
+    ):
+        """Map each conflicting receiver name to its count-weighted mean location."""
+        average_map = {}
+        for receiver_name in conflicting_receiver_names:
+            locations = receiver_rows.loc[
+                receiver_rows["staname"].astype(str) == receiver_name,
+                ["stla", "stlo", "stel", "count"],
+            ]
+            counts = locations["count"].astype(float)
+            total_count = counts.sum()
+            average_map[receiver_name] = tuple(
+                float((locations[column].astype(float) * counts).sum() / total_count)
+                for column in ("stla", "stlo", "stel")
+            )
+        return average_map
+
+    @staticmethod
+    def _set_receiver_location(
+        receiver_records,
+        name_col,
+        latitude_col,
+        longitude_col,
+        elevation_col,
+        location_map,
+    ):
+        """Overwrite receiver locations by name for one record column set."""
+        if receiver_records.empty:
+            return
+        receiver_names = receiver_records[name_col].astype(str)
+        for receiver_name, location in location_map.items():
+            name_mask = receiver_names == receiver_name
+            if not name_mask.any():
+                continue
+            for column, value in zip(
+                (latitude_col, longitude_col, elevation_col), location
+            ):
+                receiver_records.loc[name_mask, column] = value
+
+    def _set_receiver_records_location(self, location_map):
+        """Apply one location per receiver name to all record types."""
+        for receiver_records, field_names in self._iter_receiver_fields():
+            self._set_receiver_location(
+                receiver_records,
+                *field_names,
+                location_map,
+            )
 
     def _remove_receiver_records_except_locations(self, keep_map):
         """Remove non-max-count receiver locations from all record types."""
